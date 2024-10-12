@@ -1,7 +1,7 @@
 const { programasAdapter } = require('../../../adapters');
 const {
   findPlantelProgramasSchema,
-} = require('../../privates/programas');
+} = require('../../privates/programas/schema');
 
 async function programasRouter(fastify, opts, next) {
   await fastify.get(

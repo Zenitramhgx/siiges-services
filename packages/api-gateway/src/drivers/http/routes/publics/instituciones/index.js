@@ -4,7 +4,7 @@ const {
   findAllInstitucionesSchema,
   findPlantelesInstitucionSchema,
 
-} = require('../../privates/instituciones');
+} = require('../../privates/instituciones/schema');
 const { findAllTipoInstitucionesSchema } = require('../../privates/instituciones/schema');
 
 async function institucionRouter(fastify, opts, next) {

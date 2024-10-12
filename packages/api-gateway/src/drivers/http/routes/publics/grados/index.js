@@ -1,6 +1,6 @@
 const { gradosAdapter } = require('../../../adapters');
 
-const { findAllGradosSchema } = require('../../privates/grados');
+const { findAllGradosSchema } = require('../../privates/grados/schema');
 
 async function cicloEscolarRouter(fastify, opts, next) {
   await fastify.get(
