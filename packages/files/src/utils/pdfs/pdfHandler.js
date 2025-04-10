@@ -298,13 +298,15 @@ function generarTiposDeTurno(programaTurnos) {
 }
 function agregarTextoJustificado(doc, texto, x, y, width, fontSize) {
   const maxY = 260;
-  const words = texto.split(/\s+/); // Divide el texto en palabras
+  const words = texto.split(/\s+/);
   const spaceWidth = doc.getTextWidth(' ');
-  const lineHeight = fontSize * 0.5; // Ajusta la altura de la línea según sea necesario
+  const lineHeight = fontSize * 0.5;
   let currentLine = '';
   const lines = [];
 
+  doc.setFont('Nutmeg', 'normal');
   doc.setFontSize(fontSize);
+  doc.setTextColor(0, 0, 0);
 
   words.forEach((word) => {
     const testLine = `${currentLine + word} `;
@@ -317,23 +319,22 @@ function agregarTextoJustificado(doc, texto, x, y, width, fontSize) {
     }
   });
 
-  lines.push(currentLine.trim()); // Agrega la última línea
+  lines.push(currentLine.trim());
 
   lines.forEach((line, index) => {
-    // Verifica si la posición actual y más la altura de la línea superan el máximo permitido
     if (y + lineHeight > maxY) {
-      doc.addPage(); // Añade una nueva página
-      y = 55; // Reinicia la posición y en la nueva página (margen superior)
+      doc.addPage();
+      y = 55;
+
       doc.setFont('Nutmeg', 'normal');
-      doc.setFontSize(12);
-      doc.setFont(textFont);
+      doc.setFontSize(fontSize);
+      doc.setTextColor(0, 0, 0);
     }
 
     const wordsInLine = line.split(' ');
     let gapSize = spaceWidth;
 
     if (index !== lines.length - 1 && wordsInLine.length > 1) {
-      // Calcula el espacio adicional entre palabras para la justificación
       const lineWidth = doc.getTextWidth(line);
       const extraSpace = (width - lineWidth) / (wordsInLine.length - 1);
       gapSize += extraSpace;
