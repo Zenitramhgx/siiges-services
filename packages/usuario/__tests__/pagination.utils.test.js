@@ -13,4 +13,16 @@ describe('createSearchQuery', () => {
       { '$persona.apellido_materno$': { [Op.like]: '%juanpere%' } },
     ]));
   });
+
+  it('searches the concatenated full name', () => {
+    const query = createSearchQuery('Hector Roberto Cervante Torres');
+    const fullNameQuery = query[Op.or].find((condition) => condition.attribute);
+
+    expect(fullNameQuery.logic).toEqual({
+      [Op.like]: '%Hector Roberto Cervante Torres%',
+    });
+    expect(fullNameQuery.attribute).toEqual(expect.objectContaining({
+      fn: 'concat',
+    }));
+  });
 });
