@@ -1,4 +1,9 @@
-const { Op, col } = require('sequelize');
+const {
+  Op,
+  col,
+  fn,
+  where,
+} = require('sequelize');
 
 const DEFAULT_PAGE = 0;
 const DEFAULT_LIMIT = 10;
@@ -61,11 +66,25 @@ const createSearchQuery = (search, prefix = 'Usuario') => {
     `${relationPrefix}persona.apellido_materno`,
     `${relationPrefix}rol.nombre`,
   ];
+  const fullName = where(
+    fn(
+      'concat',
+      col(`${relationPrefix}persona.nombre`),
+      ' ',
+      col(`${relationPrefix}persona.apellido_paterno`),
+      ' ',
+      col(`${relationPrefix}persona.apellido_materno`),
+    ),
+    { [Op.like]: `%${search}%` },
+  );
 
   return {
-    [Op.or]: fields.map((field) => ({
-      [`$${field}$`]: { [Op.like]: `%${search}%` },
-    })),
+    [Op.or]: [
+      ...fields.map((field) => ({
+        [`$${field}$`]: { [Op.like]: `%${search}%` },
+      })),
+      fullName,
+    ],
   };
 };
 
