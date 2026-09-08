@@ -47,7 +47,7 @@ function GenerarReporteAlumnosInactivosCSV(alumnos) {
         escapeCsv(formatearFecha(alumno?.validacion?.fechaFinAntecedente)),
         escapeCsv(formatearFecha(alumno?.validacion?.fechaExpedicion)),
         escapeCsv(formatearFecha(alumno?.createdAt)),
-        escapeCsv(alumno?.validacion?.tipo?.descripcion || 'No disponible'),
+        escapeCsv(alumno?.validacion?.tipo?.nombre || 'No disponible'),
       ].join(','));
     });
   } else {
