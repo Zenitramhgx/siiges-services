@@ -6,8 +6,15 @@ const findAllTitulos = {
   description: 'Get a list Titulos Electronicos',
   querystring: {
     type: 'object',
-    properties: { numeroRvoe: { type: 'string' } },
-    required: ['numeroRvoe'],
+    properties: {
+      institucionId: { type: 'integer' },
+      numeroRvoe: { type: 'string' },
+      nombre: { type: 'string' },
+      primerApellido: { type: 'string' },
+      segundoApellido: { type: 'string' },
+      curp: { type: 'string' },
+    },
+    required: ['institucionId'],
   },
   response: {
     200: {
