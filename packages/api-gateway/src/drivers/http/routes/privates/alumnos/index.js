@@ -129,6 +129,15 @@ async function asignaturaRouter(fastify, opts, next) {
   );
 
   await fastify.get(
+    '/programas/:programaId/acreditacion',
+    {
+      schema: alumnosSchema.findGroupAlumnosAcreditacionSchema,
+      onRequest: [fastify.authenticate],
+    },
+    alumnosAdapter.findGroupAlumnosAcreditacion,
+  );
+
+  await fastify.get(
     '/programas/:programaId/count',
     {
       schema: alumnosSchema.findAlumnosCountSchema,

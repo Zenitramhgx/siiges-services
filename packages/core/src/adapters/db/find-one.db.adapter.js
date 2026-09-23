@@ -27,6 +27,7 @@ const { createInclude, getWhere } = require('../utils');
  * @param {boolean} [dbParams.strict=true] - Whether to perform a strict query.
  * @param {boolean} [dbParams.isDeleting=false] - Whether the query is for deleting a record.
  * @param {Object} [dbParams.query] - Additional query parameters.
+ * @param {Object} [dbParams.transaction] - Optional Sequelize transaction.
  * @returns {Promise<Object|null>} - The result of the database query, which could
  * be a single record or null if no record is found.
  */
@@ -38,6 +39,7 @@ const findOneQuery = (model) => async (identifierObj, dbParams = {}) => {
     isDeleting = false,
     query = undefined,
     subQuery = undefined,
+    transaction = undefined,
   } = dbParams;
 
   return model.findOne({
@@ -45,6 +47,7 @@ const findOneQuery = (model) => async (identifierObj, dbParams = {}) => {
     where: getWhere(identifierObj, isDeleting, query),
     include: createInclude(include, strict),
     subQuery,
+    transaction,
   });
 };
 

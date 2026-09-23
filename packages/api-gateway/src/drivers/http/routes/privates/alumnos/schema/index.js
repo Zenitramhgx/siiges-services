@@ -20,6 +20,7 @@ const { findAlumnosInactivosPdfSchema } = require('./find.alumnos-inactivos-pdf.
 const { findAlumnosExtraordinariosPdfSchema } = require('./find.alumnos-extraordinarios-pdf.schema');
 const { updateAlumnosSituacionSchema } = require('./update.alumnos-situacion.schema');
 const { updateAlumnosEgresoSchema } = require('./update-alumnos-egreso.schema');
+const findGroupAlumnosAcreditacionSchema = require('./find-group.alumnos-acreditacion.schema');
 
 module.exports = {
   createAlumnoSchema,
@@ -44,4 +45,5 @@ module.exports = {
   findAlumnosExtraordinariosPdfSchema,
   updateAlumnosSituacionSchema,
   updateAlumnosEgresoSchema,
+  findGroupAlumnosAcreditacionSchema,
 };

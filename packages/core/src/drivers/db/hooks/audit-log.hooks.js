@@ -39,8 +39,10 @@ const snapshotAnterior = (instance) => {
 };
 
 const registerAuditHooks = (sequelize) => {
-  const saveLog = async (data) => {
-    await sequelize.models.Bitacora.create(data);
+  // Si la operación auditada va en una transacción, la bitácora también:
+  // un rollback revierte el cambio y su registro de auditoría juntos.
+  const saveLog = async (data, options = {}) => {
+    await sequelize.models.Bitacora.create(data, { transaction: options.transaction });
   };
 
   const conManejoDeErrores = (nombreHook, fn) => async (instance, options) => {
@@ -63,7 +65,7 @@ const registerAuditHooks = (sequelize) => {
     };
   };
 
-  const logCreate = conManejoDeErrores('afterCreate', async (instance) => {
+  const logCreate = conManejoDeErrores('afterCreate', async (instance, options) => {
     const entidad = instance.constructor.name;
     if (EXCLUDED_MODELS.includes(entidad)) return;
     await saveLog({
@@ -73,10 +75,10 @@ const registerAuditHooks = (sequelize) => {
       registroId: instance.id,
       datosAnteriores: null,
       datosNuevos: sanitizar(entidad, instance.toJSON()),
-    });
+    }, options);
   });
 
-  const logUpdate = conManejoDeErrores('afterUpdate', async (instance) => {
+  const logUpdate = conManejoDeErrores('afterUpdate', async (instance, options) => {
     const entidad = instance.constructor.name;
     if (EXCLUDED_MODELS.includes(entidad)) return;
 
@@ -95,7 +97,7 @@ const registerAuditHooks = (sequelize) => {
         registroId: instance.id,
         datosAnteriores: sanitizar(entidad, snapshotAnterior(instance)),
         datosNuevos: null,
-      });
+      }, options);
       return;
     }
 
@@ -113,10 +115,10 @@ const registerAuditHooks = (sequelize) => {
       registroId: instance.id,
       datosAnteriores: sanitizar(entidad, anteriores),
       datosNuevos: sanitizar(entidad, nuevos),
-    });
+    }, options);
   });
 
-  const logDestroy = conManejoDeErrores('beforeDestroy', async (instance) => {
+  const logDestroy = conManejoDeErrores('beforeDestroy', async (instance, options) => {
     const entidad = instance.constructor.name;
     if (EXCLUDED_MODELS.includes(entidad)) return;
     await saveLog({
@@ -126,7 +128,7 @@ const registerAuditHooks = (sequelize) => {
       registroId: instance.id,
       datosAnteriores: sanitizar(entidad, instance.toJSON()),
       datosNuevos: null,
-    });
+    }, options);
   });
 
   sequelize.addHook('afterCreate', logCreate);

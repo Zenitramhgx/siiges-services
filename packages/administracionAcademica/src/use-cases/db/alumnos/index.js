@@ -22,6 +22,9 @@ const findAlumnosInactivos = require('./find.alumnos-inactivos.use-cases');
 const findAllAlumnosExtraordinarios = require('./find.alumnos-extraordinarios.use-cases');
 const updateAlumnosSituacion = require('./update-alumnos-situacion.use-cases');
 const updateAlumnosEgreso = require('./update-alumnos-egreso.use-cases');
+const findGroupAlumnosAcreditacion = require('./find-group.alumnos-acreditacion.use-cases');
+const findAcreditacionAlumno = require('./find.acreditacion-alumno.use-cases');
+const updateAcreditacionAlumno = require('./update.acreditacion-alumno.use-cases');
 
 module.exports = {
   createAlumno: createAlumno(
@@ -140,5 +143,32 @@ module.exports = {
     alumnos.findAllCalificacionesQuery,
     alumnos.findAllFilesQuery,
     alumnos.updateAlumnoQuery,
+  ),
+  findGroupAlumnosAcreditacion: findGroupAlumnosAcreditacion(
+    programas.findOneProgramaQuery,
+    alumnos.findAllAlumnosQuery,
+  ),
+  findAcreditacionAlumno: findAcreditacionAlumno(
+    grupos.findOneGrupoQuery,
+    alumnos.findOneAlumnoQuery,
+    programas.findOneProgramaQuery,
+    validaciones.findOneValidacionQuery,
+    alumnos.findOneAlumnoGrupoQuery,
+    alumnos.findAllAsignaturasQuery,
+    alumnos.findAllCalificacionesQuery,
+  ),
+  updateAcreditacionAlumno: updateAcreditacionAlumno(
+    alumnos.startTransactionQuery,
+    grupos.findOneGrupoQuery,
+    alumnos.findOneAlumnoQuery,
+    programas.findOneProgramaQuery,
+    validaciones.findOneValidacionQuery,
+    alumnos.findAllAsignaturasQuery,
+    alumnos.findAllCalificacionesQuery,
+    alumnos.findOneAlumnoGrupoQuery,
+    alumnos.createAlumnoGrupoQuery,
+    alumnos.findOneCalificacionQuery,
+    alumnos.createCalificacionQuery,
+    alumnos.updateCalificacionQuery,
   ),
 };

@@ -35,6 +35,118 @@ function esCalificacionLetraAcreditada($valor) {
   return strtoupper(trim((string) $valor)) === 'A';
 }
 
+function valorVacio($valor) {
+  return $valor === null || trim((string) $valor) === '';
+}
+
+function esAprobatoria($valor, $calificacionAprobatoria) {
+  if (valorVacio($valor)) {
+    return false;
+  }
+  if (esCalificacionLetraAcreditada($valor)) {
+    return true;
+  }
+  return is_numeric($valor) && (float) $valor >= $calificacionAprobatoria;
+}
+
+function fechaEnSegundos($valor) {
+  $tiempo = strtotime((string) $valor);
+  return $tiempo ?: 0;
+}
+
+function ordenCiclo($nombreCiclo) {
+  $nombre = (string) $nombreCiclo;
+  return [substr($nombre, 0, 4), substr($nombre, 4)];
+}
+
+function agruparIntentos($registros) {
+  $intentos = [];
+  foreach ($registros as $reg) {
+    $grupoId = $reg['grupoId'] ?? 'sin-grupo';
+    if (!isset($intentos[$grupoId])) {
+      $intentos[$grupoId] = [
+        'ciclo' => $reg['grupo']['cicloEscolar']['nombre'] ?? '',
+        'fecha' => 0,
+        'ordinario' => null,
+        'extraordinario' => null,
+      ];
+    }
+    $esExtra = ((string) ($reg['tipo'] ?? '1')) === '2';
+    $intentos[$grupoId][$esExtra ? 'extraordinario' : 'ordinario'] = $reg;
+    $intentos[$grupoId]['fecha'] = max(
+      $intentos[$grupoId]['fecha'],
+      fechaEnSegundos($reg['fechaExamen'] ?? null)
+    );
+  }
+
+  $intentos = array_values($intentos);
+
+  usort($intentos, function ($a, $b) {
+    if ($a['fecha'] > 0 && $b['fecha'] > 0 && $a['fecha'] !== $b['fecha']) {
+      return $a['fecha'] <=> $b['fecha'];
+    }
+    $cicloCompare = ordenCiclo($a['ciclo']) <=> ordenCiclo($b['ciclo']);
+    if ($cicloCompare !== 0) {
+      return $cicloCompare;
+    }
+    return $a['fecha'] <=> $b['fecha'];
+  });
+
+  return $intentos;
+}
+
+function intentoAprobado($intento, $calificacionAprobatoria) {
+  return esAprobatoria($intento['ordinario']['calificacion'] ?? null, $calificacionAprobatoria)
+    || esAprobatoria($intento['extraordinario']['calificacion'] ?? null, $calificacionAprobatoria);
+}
+
+function algunIntentoAprobado($intentos, $calificacionAprobatoria) {
+  foreach ($intentos as $intento) {
+    if (intentoAprobado($intento, $calificacionAprobatoria)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function resolverVigente($intentos, $calificacionAprobatoria) {
+  for ($i = count($intentos) - 1; $i >= 0; $i -= 1) {
+    $intento = $intentos[$i];
+    if (esAprobatoria($intento['extraordinario']['calificacion'] ?? null, $calificacionAprobatoria)) {
+      return $intento['extraordinario'];
+    }
+    if (esAprobatoria($intento['ordinario']['calificacion'] ?? null, $calificacionAprobatoria)) {
+      return $intento['ordinario'];
+    }
+  }
+
+  for ($i = count($intentos) - 1; $i >= 0; $i -= 1) {
+    $intento = $intentos[$i];
+    if (!valorVacio($intento['extraordinario']['calificacion'] ?? null)) {
+      return $intento['extraordinario'];
+    }
+    if (!valorVacio($intento['ordinario']['calificacion'] ?? null)) {
+      return $intento['ordinario'];
+    }
+  }
+
+  return null;
+}
+
+function requiereExtraordinarioPendiente($intentos, $calificacionAprobatoria) {
+  if (empty($intentos) || algunIntentoAprobado($intentos, $calificacionAprobatoria)) {
+    return false;
+  }
+
+  $ultimo = $intentos[count($intentos) - 1];
+  if (!valorVacio($ultimo['extraordinario']['calificacion'] ?? null)) {
+    return false;
+  }
+
+  $valor = $ultimo['ordinario']['calificacion'] ?? null;
+  return !valorVacio($valor) && is_numeric($valor);
+}
+
 const NOMBRE_GRUPO_OPTATIVAS = 'OPTATIVAS ASIGNADAS';
 const NOMBRE_GRUPO_PENDIENTES = 'ASIGNATURAS PENDIENTES';
 
@@ -272,28 +384,9 @@ foreach ($asignaturasPrograma as $asignaturaCat) {
     continue;
   }
 
-  $tieneExtraordinario = false;
-  $ordinarioReprobado = false;
-  $tieneAprobado = false;
-
   foreach ($calificacionesDeEstaAsignatura as $cal) {
     $calificacionValor = $cal['calificacion'] ?? null;
-    $calificacionVacia = ($calificacionValor === null || trim((string) $calificacionValor) === '');
-    $tipoCal = $cal['tipo'] ?? null;
-    $esOrdinario = ($tipoCal === 1 || $tipoCal === '1');
-    $esExtraordinario = ($tipoCal === 2 || $tipoCal === '2');
-
-    if ($esExtraordinario) {
-      $tieneExtraordinario = true;
-    }
-
-    if (!$calificacionVacia && is_numeric($calificacionValor)) {
-      if ((float) $calificacionValor >= $calificacionAprobatoria) {
-        $tieneAprobado = true;
-      } elseif ($esOrdinario) {
-        $ordinarioReprobado = true;
-      }
-    }
+    $calificacionVacia = valorVacio($calificacionValor);
 
     $nombreCiclo = $cal['grupo']['cicloEscolar']['nombre'] ?? 'SIN CICLO';
 
@@ -315,7 +408,9 @@ foreach ($asignaturasPrograma as $asignaturaCat) {
     ];
   }
 
-  if ($ordinarioReprobado && !$tieneExtraordinario && !$tieneAprobado) {
+  $intentos = agruparIntentos($calificacionesDeEstaAsignatura);
+
+  if (requiereExtraordinarioPendiente($intentos, $calificacionAprobatoria)) {
     $filasPendientes[] = [
       'asignatura' => $asignaturaCat,
       'calificacion' => null,
@@ -327,7 +422,7 @@ foreach ($asignaturasPrograma as $asignaturaCat) {
   }
 }
 
-$calificacionesTipo2PorAsignaturaId = [];
+$calificacionesOptativasPorAsignaturaId = [];
 foreach ($calificacionesInput as $calificacion) {
   $asignatura = $calificacion['asignatura'] ?? [];
   $tipoCatalogo = $asignatura['tipo'] ?? null;
@@ -339,48 +434,23 @@ foreach ($calificacionesInput as $calificacion) {
   if ($asignaturaId === null) {
     continue;
   }
-  if (!isset($calificacionesTipo2PorAsignaturaId[$asignaturaId])) {
-    $calificacionesTipo2PorAsignaturaId[$asignaturaId] = [
+  if (!isset($calificacionesOptativasPorAsignaturaId[$asignaturaId])) {
+    $calificacionesOptativasPorAsignaturaId[$asignaturaId] = [
       'asignatura' => $asignatura,
       'registros' => [],
     ];
   }
-  $calificacionesTipo2PorAsignaturaId[$asignaturaId]['registros'][] = $calificacion;
+  $calificacionesOptativasPorAsignaturaId[$asignaturaId]['registros'][] = $calificacion;
 }
 
 $filasOptativas = [];
 
-foreach ($calificacionesTipo2PorAsignaturaId as $asignaturaId => $info) {
+foreach ($calificacionesOptativasPorAsignaturaId as $info) {
   $asignaturaDet = $info['asignatura'];
-  $registros = $info['registros'];
-
-  $ordinario = null;
-  $extraordinario = null;
-
-  foreach ($registros as $reg) {
-    $tipoCal = $reg['tipo'] ?? null;
-    if ($tipoCal === 2 || $tipoCal === '2') {
-      $extraordinario = $reg;
-    } elseif ($tipoCal === 1 || $tipoCal === '1') {
-      if ($ordinario === null) {
-        $ordinario = $reg;
-      }
-    } elseif ($ordinario === null) {
-      $ordinario = $reg;
-    }
-  }
-
-  $vigente = $extraordinario ?? $ordinario;
-  $vigenteEsExtraordinario = ($extraordinario !== null);
+  $intentos = agruparIntentos($info['registros']);
+  $vigente = resolverVigente($intentos, $calificacionAprobatoria);
 
   if ($vigente === null) {
-    continue;
-  }
-
-  $valorVigente = $vigente['calificacion'] ?? null;
-  $valorVacio = ($valorVigente === null || trim((string) $valorVigente) === '');
-
-  if ($valorVacio) {
     $filasOptativas[] = [
       'asignatura' => $asignaturaDet,
       'calificacion' => null,
@@ -390,49 +460,26 @@ foreach ($calificacionesTipo2PorAsignaturaId as $asignaturaId => $info) {
     continue;
   }
 
-  if (esCalificacionLetraAcreditada($valorVigente)) {
-    $filasOptativas[] = [
+  $valorVigente = $vigente['calificacion'];
+
+  if (
+    !esAprobatoria($valorVigente, $calificacionAprobatoria)
+    && requiereExtraordinarioPendiente($intentos, $calificacionAprobatoria)
+  ) {
+    $filasPendientes[] = [
       'asignatura' => $asignaturaDet,
-      'calificacion' => 'ACREDITADO',
-      'fechaExamen' => $vigente['fechaExamen'] ?? null,
-      'noAcreditado' => false,
+      'calificacion' => null,
+      'tipo' => 2,
+      'fechaExamen' => null,
+      'sinCalificacion' => true,
+      'soloAcreditado' => false,
     ];
-    continue;
-  }
-
-  if (is_numeric($valorVigente)) {
-    $esAprobatoria = ((float) $valorVigente >= $calificacionAprobatoria);
-
-    if ($esAprobatoria) {
-      $filasOptativas[] = [
-        'asignatura' => $asignaturaDet,
-        'calificacion' => $valorVigente,
-        'fechaExamen' => $vigente['fechaExamen'] ?? null,
-        'noAcreditado' => false,
-      ];
-    } elseif ($vigenteEsExtraordinario) {
-      $filasOptativas[] = [
-        'asignatura' => $asignaturaDet,
-        'calificacion' => $valorVigente,
-        'fechaExamen' => $vigente['fechaExamen'] ?? null,
-        'noAcreditado' => false,
-      ];
-    } else {
-      $filasPendientes[] = [
-        'asignatura' => $asignaturaDet,
-        'calificacion' => null,
-        'tipo' => 2,
-        'fechaExamen' => null,
-        'sinCalificacion' => true,
-        'soloAcreditado' => false,
-      ];
-    }
     continue;
   }
 
   $filasOptativas[] = [
     'asignatura' => $asignaturaDet,
-    'calificacion' => $valorVigente,
+    'calificacion' => esCalificacionLetraAcreditada($valorVigente) ? 'ACREDITADO' : $valorVigente,
     'fechaExamen' => $vigente['fechaExamen'] ?? null,
     'noAcreditado' => false,
   ];

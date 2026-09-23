@@ -6,6 +6,7 @@ const {
   updateAndFindQuery,
   findAllQuery,
   deleteAndFindQuery,
+  startTransactionQuery,
 } = queries;
 
 const {
@@ -48,4 +49,5 @@ module.exports = {
   findAllGruposQuery: findAllQuery(Grupo),
   findAllAsignaturasQuery: findAllQuery(Asignatura),
   findAllFilesQuery: findAllQuery(File),
+  startTransactionQuery: startTransactionQuery(Calificacion),
 };
