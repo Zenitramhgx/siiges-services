@@ -7,6 +7,13 @@ const SITUACION_ACTIVO_ID = 1;
 const ASIGNATURA_TIPO_REGULAR = 1;
 const SITUACION_VALIDACION_AUTENTICO = 1;
 
+// Los créditos tienen máximo 2 decimales; se manejan como enteros (centésimas)
+// para evitar errores de punto flotante (ej. 81.03999999999999).
+const toDecimal = (valor) => {
+  const numero = parseFloat(valor);
+  return Number.isNaN(numero) ? 0 : Math.round(numero * 100);
+};
+
 const validateActivacionRequirements = async (alumno, findAllFilesQuery) => {
   if (!alumno.validacion || alumno.validacion.situacionValidacionId
     !== SITUACION_VALIDACION_AUTENTICO) {
@@ -80,15 +87,15 @@ const validateEgresoRequirements = async (
     );
   }
 
-  const creditosRequeridos = parseFloat(programa.creditos);
+  const creditosRequeridos = toDecimal(programa.creditos);
   let creditosCursados = 0;
   aprobadasPorAsignatura.forEach(({ asignatura }) => {
-    creditosCursados += parseFloat(asignatura.creditos);
+    creditosCursados += toDecimal(asignatura.creditos);
   });
 
   if (creditosCursados < creditosRequeridos) {
     throw boom.badRequest(
-      `Este alumno no se puede validar como Egresado: Los créditos cursados (${creditosCursados}) son menores a los créditos requeridos por el RVOE (${creditosRequeridos}).`,
+      `Este alumno no se puede validar como Egresado: Los créditos cursados (${creditosCursados / 100}) son menores a los créditos requeridos por el RVOE (${creditosRequeridos / 100}).`,
     );
   }
 };
