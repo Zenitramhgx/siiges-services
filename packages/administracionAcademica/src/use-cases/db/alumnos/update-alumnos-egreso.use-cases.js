@@ -9,6 +9,11 @@ const ASIGNATURA_TIPO_REGULAR = 1;
 const SITUACION_VALIDACION_AUTENTICO = 1;
 const EGRESO_MASIVO_BATCH_SIZE = 10;
 
+const toDecimal = (valor) => {
+  const numero = parseFloat(valor);
+  return Number.isNaN(numero) ? 0 : Math.round(numero * 100);
+};
+
 const checkAlumnoEgreso = (alumno, programaCache, calificacionesPorAlumno) => {
   if (!alumno.validacion || alumno.validacion.situacionValidacionId
     !== SITUACION_VALIDACION_AUTENTICO) {
@@ -36,7 +41,7 @@ const checkAlumnoEgreso = (alumno, programaCache, calificacionesPorAlumno) => {
 
   let creditosCursados = 0;
   aprobadasPorAsignatura.forEach(({ asignatura }) => {
-    creditosCursados += parseFloat(asignatura.creditos);
+    creditosCursados += toDecimal(asignatura.creditos);
   });
 
   return creditosCursados >= creditosRequeridos;
@@ -64,7 +69,7 @@ const buildProgramaCaches = async (
     programaCaches.set(programaId, {
       asignaturasRegulares,
       calificacionAprobatoria: parseFloat(programa.calificacionAprobatoria),
-      creditosRequeridos: parseFloat(programa.creditos),
+      creditosRequeridos: toDecimal(programa.creditos),
     });
   }));
 
