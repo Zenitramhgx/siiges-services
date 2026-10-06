@@ -15,16 +15,9 @@ const createActualizacionSchema = {
   body: {
     type: 'object',
     properties: {
-      ...solicitud,
-      programa: {
-        type: 'object',
-        properties: {
-          ...programa,
-        },
-        required: ['modalidadId', 'plantelId'],
-      },
+      tipoSolicitudId: { type: 'integer', enum: [5] },
     },
-    required: ['tipoSolicitudId', 'usuarioId', 'estatusSolicitudId', 'programa'],
+    required: ['tipoSolicitudId'],
     additionalProperties: false,
   },
   response: {

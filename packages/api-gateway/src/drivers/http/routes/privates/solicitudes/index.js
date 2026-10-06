@@ -61,7 +61,7 @@ async function solicitudRouter(fastify, opts, next) {
   await fastify.post(
     '/:solicitudId/cambioRepresentanteLegal',
     {
-      // schema: solicitudesSchema.createCambioRepresentanteLegalSchema,
+      schema: solicitudesSchema.createCambioRepresentanteLegalSchema,
       onRequest: [fastify.authenticate],
     },
     solicitudesAdapter.createSolicitudPrograma,
@@ -70,7 +70,7 @@ async function solicitudRouter(fastify, opts, next) {
   await fastify.post(
     '/:solicitudId/actualizacion',
     {
-      // schema: solicitudesSchema.createActualizacionSchema,
+      schema: solicitudesSchema.createActualizacionSchema,
       onRequest: [fastify.authenticate],
     },
     solicitudesAdapter.createSolicitudPrograma,
@@ -79,7 +79,7 @@ async function solicitudRouter(fastify, opts, next) {
   await fastify.post(
     '/:solicitudId/cambioNombreInstitucion',
     {
-      // schema: solicitudesSchema.createCambioNombreInstitucionSchema,
+      schema: solicitudesSchema.createCambioNombreInstitucionSchema,
       onRequest: [fastify.authenticate],
     },
     solicitudesAdapter.createSolicitudPrograma,

@@ -9,4 +9,6 @@ const niveles = {
   8: 'PA',
 };
 
-module.exports = { niveles };
+const ESTATUS_SOLICITUD_INICIAL_ID = 1;
+
+module.exports = { niveles, ESTATUS_SOLICITUD_INICIAL_ID };

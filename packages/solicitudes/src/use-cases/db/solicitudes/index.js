@@ -40,16 +40,19 @@ module.exports = {
     solicitudes.findOneSolicitudProgramaQuery,
     solicitudes.countSolicitudesQuery,
     solicitudes.createSolicitudProgramaQuery,
+    solicitudes.findOneEstatusSolicitudQuery,
   ),
   createActualizacionSolicitudPrograma: createActualizacionSolicitudPrograma(
     solicitudes.findOneSolicitudProgramaQuery,
     solicitudes.countSolicitudesQuery,
     solicitudes.createSolicitudProgramaQuery,
+    solicitudes.findOneEstatusSolicitudQuery,
   ),
   createCambioNombreSolicitudPrograma: createCambioNombreSolicitudPrograma(
     solicitudes.findOneSolicitudProgramaQuery,
     solicitudes.countSolicitudesQuery,
     solicitudes.createSolicitudProgramaQuery,
+    solicitudes.findOneEstatusSolicitudQuery,
   ),
   findAllSolicitudesProgramas: findAllSolicitudesProgramas(
     solicitudes.findAllSolicitudesProgramasQuery,

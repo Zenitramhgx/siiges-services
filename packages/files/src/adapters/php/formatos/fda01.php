@@ -62,8 +62,10 @@ $nombreInstitucion = !empty($institucion['esNombreAutorizado']) && $institucion[
   ? ($institucion['nombre'] ?? '[SIN NOMBRE]')
   : ($ratificacion['nombrePropuesto1'] ?? '[SIN RATIFICACIÓN]');
 
+// El índice del arreglo se mapea como $tituloTipoSolicitud[$tipoSolicitudId - 1].
+// El sufijo "(RVOE)" solo corresponde al tipo 1 (índice 0).
 $tituloTipoSolicitud = [
-  "SOLICITUD DE RECONOCIMIENTO DE VALIDEZ OFICIAL DE ESTUDIOS",
+  "SOLICITUD DE RECONOCIMIENTO DE VALIDEZ OFICIAL DE ESTUDIOS (RVOE)",
   "SOLICITUD DE REFRENDO A PLAN Y PROGRAMA DE ESTUDIO",
   "SOLICITUD DE CAMBIO DE DOMICILIO",
   "SOLICITUD DE CAMBIO DE REPRESENTANTE LEGAL",

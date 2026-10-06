@@ -23,6 +23,7 @@ const {
   Domicilio,
   Persona,
   Interesado,
+  EstatusSolicitud,
 } = models;
 
 const {
@@ -75,6 +76,7 @@ module.exports = {
   }),
   updateAndFindSolicitudQuery: updateAndFindQuery(Solicitud),
   findOneSolicitudQuery: findOneQuery(Solicitud),
+  findOneEstatusSolicitudQuery: findOneQuery(EstatusSolicitud),
   findOneNivelQuery: findOneQuery(Nivel),
   findOneUsuarioQuery: findOneQuery(Usuario),
   findOneUsuarioUsuarioQuery: findOneQuery(UsuarioUsuario),
