@@ -1,7 +1,11 @@
 const { generateMapObservaciones } = require('./observacionSolicitud.topic');
-const { generateMapFoliosAlumnos } = require('./folioDocumentosAlumnos.topic');
+const {
+  generateAntecedentesAcademicos,
+  generateMapFoliosAlumnos,
+} = require('./folioDocumentosAlumnos.topic');
 
 module.exports = {
   generateMapObservaciones,
+  generateAntecedentesAcademicos,
   generateMapFoliosAlumnos,
 };

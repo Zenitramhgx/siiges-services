@@ -25,6 +25,7 @@ const NOTIFICATION_MAPPING = {
       template: 'folioDocumentosAlumnos',
       params: {
         folioSolicitud,
+        tipoSolicitud: solicitudFolio.tipoSolicitudFolio?.nombre,
         url: solicitudFolio.dataValues.url,
       },
     });
