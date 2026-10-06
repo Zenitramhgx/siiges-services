@@ -1,3 +1,5 @@
+const CALIFICACIONES_SIN_EXTRAORDINARIO = ['RC', 'NS', 'NC', 'NP', 'SD'];
+
 const findAlumnosExtra = (
   findAllCalificacionesQuery,
   findAllGruposQuery,
@@ -31,7 +33,10 @@ const findAlumnosExtra = (
     { include },
   );
 
-  return calificacionesGrupo;
+  return calificacionesGrupo.filter(({ calificacion }) => {
+    const valor = String(calificacion ?? '').trim().toUpperCase();
+    return !CALIFICACIONES_SIN_EXTRAORDINARIO.includes(valor);
+  });
 };
 
 module.exports = findAlumnosExtra;
