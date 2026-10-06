@@ -53,14 +53,16 @@ function GenerarReporteAlumnosExtraordinarios(calificaciones) {
   });
   currentPositionY = doc.previousAutoTable.finalY + 10;
 
-  const calificacionesData = calificaciones?.map((cal) => [
-    cal?.alumno?.matricula || 'No disponible',
-    cal?.alumno?.persona?.apellidoPaterno || 'No disponible',
-    cal?.alumno?.persona?.apellidoMaterno || 'No disponible',
-    cal?.alumno?.persona?.nombre || 'No disponible',
-    cal?.asignatura?.grado?.nombre || 'No disponible',
-    cal?.asignatura?.clave || 'No disponible',
-  ]) || [['No hay calificaciones extraordinarias disponibles']];
+  const calificacionesData = calificaciones?.length
+    ? calificaciones.map((cal) => [
+      cal?.alumno?.matricula || 'No disponible',
+      cal?.alumno?.persona?.apellidoPaterno || 'No disponible',
+      cal?.alumno?.persona?.apellidoMaterno || 'No disponible',
+      cal?.alumno?.persona?.nombre || 'No disponible',
+      cal?.asignatura?.grado?.nombre || 'No disponible',
+      cal?.asignatura?.clave || 'No disponible',
+    ])
+    : [['No hay calificaciones extraordinarias disponibles']];
 
   doc.autoTable({
     startY: currentPositionY,

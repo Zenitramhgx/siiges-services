@@ -1,5 +1,12 @@
 const { Logger } = require('@siiges-services/shared');
 
+const CALIFICACIONES_SIN_EXTRAORDINARIO = ['RC', 'NS', 'NC', 'NP', 'SD'];
+
+const tieneExtraordinario = ({ calificacion }) => {
+  const valor = String(calificacion ?? '').trim().toUpperCase();
+  return !CALIFICACIONES_SIN_EXTRAORDINARIO.includes(valor);
+};
+
 const generarReporteAlumnosExtraordinarios = (
   GenerarReporteAlumnosExtraordinarios,
 ) => async (calificaciones) => {
@@ -7,7 +14,10 @@ const generarReporteAlumnosExtraordinarios = (
     '[files.generarReporteAlumnosExtraordinarios.use-case]: '
     + 'Generando reporte de alumnos extraordinarios',
   );
-  const file = await GenerarReporteAlumnosExtraordinarios(calificaciones);
+
+  const calificacionesExtraordinario = (calificaciones || []).filter(tieneExtraordinario);
+
+  const file = await GenerarReporteAlumnosExtraordinarios(calificacionesExtraordinario);
   return Buffer.from(file);
 };
 
