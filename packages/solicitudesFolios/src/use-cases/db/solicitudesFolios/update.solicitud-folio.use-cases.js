@@ -20,6 +20,8 @@ const includeUsuario = [
   },
 ];
 
+const includeTipoSolicitud = [{ association: 'tipoSolicitudFolio' }];
+
 const updateSolicitudFolio = (
   findOneSolicitudFolioQuery,
   updateSolicitudFolioQuery,
@@ -28,15 +30,15 @@ const updateSolicitudFolio = (
   checkers.throwErrorIfDataIsFalsy(solicitud, 'solicitudes-folios', identifierObj.id);
 
   const updatedData = { ...data };
-  let include = [];
+  let include = includeTipoSolicitud;
 
   if (data?.observaciones) {
     updatedData.estatusSolicitudFolioId = ESTATUS_ATENDER_OBSERVACIONES;
-    include = includeUsuario;
+    include = [...includeUsuario, ...includeTipoSolicitud];
   }
 
   if (data?.estatusSolicitudFolioId === ESTATUS_FOLIOS_ASIGNADOS) {
-    include = includeUsuario;
+    include = [...includeUsuario, ...includeTipoSolicitud];
   }
 
   const solicitudFolioUpdated = await updateSolicitudFolioQuery(
