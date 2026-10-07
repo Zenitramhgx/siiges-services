@@ -1,26 +1,44 @@
 /* eslint-disable no-restricted-globals */
-const findAllInstituciones = (findAllInstitucionesQuery, findPlantelesQuery) => async ({ queryParams }) => {
-  const { esNombreAutorizado, tipoInstitucionId, municipioId } = queryParams;
+const {
+  normalizePagination,
+  createSearchQuery,
+  createInstitutionOrder,
+} = require('../../../utils/pagination.utils');
 
-  const includeValidate = esNombreAutorizado !== undefined ? [{
-    association: 'ratificacionesNombre', limit: 1, order: [['createdAt', 'DESC']], where: { esNombreAutorizado },
-  }] : [{
+const findAllInstituciones = (
+  findAllInstitucionesQuery,
+  findPlantelesQuery,
+) => async ({ queryParams }) => {
+  const {
+    esNombreAutorizado,
+    tipoInstitucionId,
+    municipioId,
+    page = 0,
+    limit = 10,
+    search = '',
+    sortBy = 'id',
+    sortOrder = 'asc',
+  } = queryParams;
+
+  const pagination = normalizePagination({
+    page,
+    limit,
+    sortBy,
+    sortOrder,
+  });
+
+  const include = [{
     association: 'ratificacionesNombre',
     limit: 1,
     order: [['createdAt', 'DESC']],
+    ...(esNombreAutorizado !== undefined ? { where: { esNombreAutorizado } } : {}),
   }];
 
-  const include = includeValidate;
   let where = null;
 
   if (tipoInstitucionId) {
     where = { tipoInstitucionId };
   }
-
-  let instituciones = await findAllInstitucionesQuery(where, {
-    include,
-    strict: true,
-  });
 
   if (municipioId) {
     const planteles = await findPlantelesQuery(null, {
@@ -29,22 +47,37 @@ const findAllInstituciones = (findAllInstitucionesQuery, findPlantelesQuery) => 
       subQuery: false,
     });
 
-    const institucionIds = [...new Set(planteles.map((p) => p.institucionId))];
-    instituciones = instituciones.filter((inst) => institucionIds.includes(inst.id));
+    const institucionIds = [...new Set(planteles.map((p) => p.institucionId).filter(Boolean))];
+    where = { ...(where || {}), id: institucionIds };
   }
 
-  if (esNombreAutorizado) {
-    instituciones = instituciones.filter((obj) => {
-      const hasRatificaciones = obj.ratificacionesNombre.length > 0;
-      const hasAutorizado = obj.ratificacionesNombre.some(
-        (ratificacion) => ratificacion.esNombreAutorizado === esNombreAutorizado,
-      );
+  const instituciones = await findAllInstitucionesQuery(where, {
+    include,
+    strict: true,
+    query: createSearchQuery(search),
+    order: createInstitutionOrder(pagination),
+    pagination: {
+      limit: pagination.limit,
+      offset: pagination.offset,
+      distinct: true,
+    },
+  });
 
-      return hasRatificaciones && hasAutorizado;
-    });
-  }
+  const rows = Array.isArray(instituciones) ? instituciones : instituciones?.rows || [];
+  const total = Array.isArray(instituciones) ? instituciones.length : instituciones?.count || 0;
 
-  return instituciones;
+  return {
+    data: rows,
+    pagination: {
+      page: pagination.page,
+      limit: pagination.limit,
+      total,
+      totalPages: total === 0 ? 0 : Math.ceil(total / pagination.limit),
+      sortBy: pagination.sortBy,
+      sortOrder: pagination.sortOrder,
+      search,
+    },
+  };
 };
 
 module.exports = findAllInstituciones;
