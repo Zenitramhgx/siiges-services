@@ -303,6 +303,10 @@ const tipoDocumentoObj = [
     id: 76,
     name: 'COPIA_REVALIDACION',
   },
+  {
+    id: 77,
+    name: 'IDENTIFICACION_OFICIAL_CON_FOTOGRAFIA',
+  },
 ];
 
 module.exports = tipoDocumentoObj;
