@@ -51,7 +51,7 @@ const findGroupAlumnosAcreditacion = (
   });
 
   return {
-    data: result.rows,
+    rows: result.rows,
     pagination: {
       page: pagination.page,
       limit: pagination.limit,

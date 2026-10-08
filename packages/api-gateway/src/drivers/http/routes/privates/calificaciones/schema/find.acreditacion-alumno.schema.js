@@ -49,6 +49,8 @@ const findAcreditacionAlumnoSchema = {
               },
             },
             inscritoEnGrupo: { type: 'boolean' },
+            avisoOtroGrado: { type: 'string', nullable: true },
+            avisoGradoAnterior: { type: 'string', nullable: true },
             habilitadoParaCaptura: { type: 'boolean' },
             motivosNoHabilitado: { type: 'array', items: { type: 'string' } },
             limites: {

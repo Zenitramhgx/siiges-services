@@ -34,43 +34,48 @@ const findGroupAlumnosAcreditacionSchema = {
       type: 'object',
       properties: {
         data: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'integer' },
-              matricula: { type: 'string' },
-              situacionId: { type: 'integer' },
-              persona: {
-                type: 'object',
-                properties: {
-                  nombre: { type: 'string' },
-                  apellidoPaterno: { type: 'string' },
-                  apellidoMaterno: { type: 'string' },
-                },
-              },
-              situacion: {
+          type: 'object',
+          properties: {
+            rows: {
+              type: 'array',
+              items: {
                 type: 'object',
                 properties: {
                   id: { type: 'integer' },
-                  nombre: { type: 'string' },
+                  matricula: { type: 'string' },
+                  situacionId: { type: 'integer' },
+                  persona: {
+                    type: 'object',
+                    properties: {
+                      nombre: { type: 'string' },
+                      apellidoPaterno: { type: 'string' },
+                      apellidoMaterno: { type: 'string' },
+                    },
+                  },
+                  situacion: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'integer' },
+                      nombre: { type: 'string' },
+                    },
+                  },
                 },
               },
             },
+            pagination: {
+              type: 'object',
+              properties: {
+                page: { type: 'integer' },
+                limit: { type: 'integer' },
+                total: { type: 'integer' },
+                totalPages: { type: 'integer' },
+                sortBy: { type: 'string' },
+                sortOrder: { type: 'string' },
+                search: { type: 'string' },
+              },
+              required: ['page', 'limit', 'total', 'totalPages', 'sortBy', 'sortOrder', 'search'],
+            },
           },
-        },
-        pagination: {
-          type: 'object',
-          properties: {
-            page: { type: 'integer' },
-            limit: { type: 'integer' },
-            total: { type: 'integer' },
-            totalPages: { type: 'integer' },
-            sortBy: { type: 'string' },
-            sortOrder: { type: 'string' },
-            search: { type: 'string' },
-          },
-          required: ['page', 'limit', 'total', 'totalPages', 'sortBy', 'sortOrder', 'search'],
         },
       },
     },

@@ -7,11 +7,23 @@ const {
   esLetraAcreditada,
   esAprobatoria,
   esReprobatoriaNumerica,
+  fechaISO,
+  fechaDeHoy,
+  esFechaFutura,
   agruparIntentos,
   agruparPorAsignatura,
   algunIntentoAprobado,
   clasificarIntentos,
 } = require('./calificaciones-intentos.helpers');
+const {
+  buscarGrupoDeOtroGradoEnElCiclo,
+  mensajeConflictoDeGrado,
+  INCLUDE_ALUMNO_GRUPOS,
+} = require('./grupos-alumno.helpers');
+const {
+  revisarGradoAnterior,
+  mensajeGradoAnteriorIncompleto,
+} = require('./curricula-grados.helpers');
 
 const SITUACION_ALUMNO_ACTIVO = 1;
 const SITUACIONES_VALIDACION = [1, 3];
@@ -20,7 +32,7 @@ const SITUACIONES_VALIDACION = [1, 3];
 
 const validateGrupo = async ({ findOneGrupoQuery, grupoId }) => {
   const grupo = await findOneGrupoQuery({ id: grupoId }, {
-    include: [{ association: 'cicloEscolar' }],
+    include: [{ association: 'cicloEscolar' }, { association: 'grado' }],
     strict: false,
   });
   checkers.throwErrorIfDataIsFalsy(grupo, 'grupos', grupoId);
@@ -69,6 +81,15 @@ const validarValorCalificacion = (valor, programa) => {
   return null;
 };
 
+const validarFechaExamen = (valor) => {
+  if (valorVacio(valor)) return null;
+  if (fechaISO(valor) === null) return `la fecha de examen "${valor}" no es válida`;
+  if (esFechaFutura(valor)) {
+    return `la fecha de examen no puede ser posterior a hoy (${fechaDeHoy()})`;
+  }
+  return null;
+};
+
 /**
  * Valor que tendrá el ordinario de este grupo después de guardar:
  * el que viene en el payload, o si no viene, el que ya está en BD.
@@ -80,7 +101,14 @@ const ordinarioResultante = ({ payloadPorClave, asignaturaId, intentoActual }) =
 };
 
 const validarItem = ({
-  item, asignatura, calificacionesAsignatura, grupo, programa, payloadPorClave,
+  item,
+  asignatura,
+  calificacionesAsignatura,
+  grupo,
+  programa,
+  payloadPorClave,
+  conflictoDeGrado,
+  gradoAnterior,
 }) => {
   if (!asignatura) {
     return [`Asignatura ${item.asignaturaId}: no pertenece al programa`];
@@ -105,7 +133,16 @@ const validarItem = ({
       errores.push('ya está aprobada en otro ciclo escolar');
     } else if (!esDelGrado && !pendientePorRecursar) {
       errores.push('no es del grado del grupo ni está pendiente por recursar');
+    } else if (conflictoDeGrado && !pendientePorRecursar) {
+      // Recursar materias sueltas sí se permite; cursar un segundo grado no
+      errores.push(mensajeConflictoDeGrado(conflictoDeGrado));
     }
+  }
+
+  // Currícula rígida: este grado espera a que el anterior quede completo.
+  // Los recursamientos de grados previos sí se permiten.
+  if (gradoAnterior && esDelGrado) {
+    errores.push(mensajeGradoAnteriorIncompleto(gradoAnterior));
   }
 
   const errorValor = validarValorCalificacion(item.calificacion, programa);
@@ -114,6 +151,9 @@ const validarItem = ({
   if (!valorVacio(item.calificacion) && valorVacio(item.fechaExamen)) {
     errores.push('la fecha de examen es obligatoria cuando hay calificación');
   }
+
+  const errorFecha = validarFechaExamen(item.fechaExamen);
+  if (errorFecha) errores.push(errorFecha);
 
   if (tipo === TIPO_EXTRAORDINARIO) {
     const ordinario = ordinarioResultante({
@@ -229,6 +269,7 @@ const updateAcreditacionAlumno = (
   findAllAsignaturasQuery,
   findAllCalificacionesQuery,
   findOneAlumnoGrupoQuery,
+  findAllAlumnoGrupoQuery,
   createAlumnoGrupoQuery,
   findOneCalificacionQuery,
   createCalificacionQuery,
@@ -251,13 +292,23 @@ const updateAcreditacionAlumno = (
     throw boom.badRequest(`[calificaciones]: renglones duplicados (asignatura-tipo): ${duplicados.join(', ')}`);
   }
 
-  const [asignaturas, calificaciones] = await Promise.all([
-    findAllAsignaturasQuery({ programaId }),
+  const [asignaturas, calificaciones, alumnoGrupos] = await Promise.all([
+    findAllAsignaturasQuery({ programaId }, {
+      include: [{ association: 'grado' }],
+      strict: false,
+    }),
     findAllCalificacionesQuery({ alumnoId }, {
       include: [{ association: 'grupo', include: [{ association: 'cicloEscolar' }] }],
       strict: false,
     }),
+    findAllAlumnoGrupoQuery({ alumnoId }, { include: INCLUDE_ALUMNO_GRUPOS, strict: false }),
   ]);
+
+  // Si ya cursa otro grado en este ciclo, aquí solo se permiten recursamientos
+  const conflictoDeGrado = buscarGrupoDeOtroGradoEnElCiclo(
+    alumnoGrupos.map((alumnoGrupo) => alumnoGrupo.toJSON()),
+    grupo,
+  );
 
   const asignaturasPorId = asignaturas.reduce((acc, asignatura) => {
     acc[asignatura.id] = asignatura;
@@ -268,6 +319,12 @@ const updateAcreditacionAlumno = (
   );
 
   // Se valida TODO antes de abrir la transacción y se reportan todos los errores juntos
+  const gradoAnterior = revisarGradoAnterior({
+    asignaturas,
+    grupo,
+    calificacionesPorAsignatura,
+  });
+
   const errores = dataArray.flatMap((item) => validarItem({
     item,
     asignatura: asignaturasPorId[item.asignaturaId],
@@ -275,6 +332,8 @@ const updateAcreditacionAlumno = (
     grupo,
     programa,
     payloadPorClave,
+    conflictoDeGrado,
+    gradoAnterior,
   }));
 
   if (errores.length > 0) {

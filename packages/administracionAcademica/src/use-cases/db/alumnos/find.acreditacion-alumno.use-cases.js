@@ -6,6 +6,15 @@ const {
   algunIntentoAprobado,
   clasificarIntentos,
 } = require('./calificaciones-intentos.helpers');
+const {
+  buscarGrupoDeOtroGradoEnElCiclo,
+  avisoConflictoDeGrado,
+  INCLUDE_ALUMNO_GRUPOS,
+} = require('./grupos-alumno.helpers');
+const {
+  revisarGradoAnterior,
+  avisoGradoAnteriorIncompleto,
+} = require('./curricula-grados.helpers');
 
 const SITUACION_ALUMNO_ACTIVO = 1;
 const SITUACIONES_VALIDACION = [1, 3];
@@ -43,7 +52,7 @@ const compararAsignaturas = (a, b) => {
  * - Si ya se aprobó en cualquier otro grupo y no tiene intento aquí, se muestra bloqueada.
  */
 const buildFila = ({
-  asignatura, calificaciones, grupo, calificacionAprobatoria,
+  asignatura, calificaciones, grupo, calificacionAprobatoria, conflictoDeGrado, gradoAnterior,
 }) => {
   const {
     intentoActual, otrosIntentos, intentosAnteriores,
@@ -57,7 +66,22 @@ const buildFila = ({
 
   if (!esDelGrado && !intentoActual && !pendientePorRecursar) return null;
 
-  const bloqueada = !intentoActual && aprobadaEnOtroGrupo;
+  // Si el alumno ya cursa otro grado en este ciclo, aquí solo puede recursar
+  const soloRecursamiento = Boolean(conflictoDeGrado) && !intentoActual && !pendientePorRecursar;
+  // Currícula rígida: el grado del grupo espera a que termine el grado anterior
+  const esperaGradoAnterior = Boolean(gradoAnterior) && esDelGrado;
+  const bloqueada = (!intentoActual && aprobadaEnOtroGrupo)
+    || soloRecursamiento
+    || esperaGradoAnterior;
+
+  let motivoBloqueo = null;
+  if (!intentoActual && aprobadaEnOtroGrupo) {
+    motivoBloqueo = 'Asignatura aprobada en otro ciclo escolar';
+  } else if (esperaGradoAnterior) {
+    motivoBloqueo = avisoGradoAnteriorIncompleto(gradoAnterior);
+  } else if (soloRecursamiento) {
+    motivoBloqueo = avisoConflictoDeGrado(conflictoDeGrado);
+  }
 
   return {
     asignaturaId: asignatura.id,
@@ -73,7 +97,7 @@ const buildFila = ({
     ordinario: toCalificacionDto(intentoActual?.ordinario),
     extraordinario: toCalificacionDto(intentoActual?.extraordinario),
     bloqueada,
-    motivoBloqueo: bloqueada ? 'Asignatura aprobada en otro ciclo escolar' : null,
+    motivoBloqueo,
     intentosPrevios: intentosPrevios.map(toIntentoDto),
   };
 };
@@ -84,6 +108,7 @@ const findAcreditacionAlumno = (
   findOneProgramaQuery,
   findOneValidacionQuery,
   findOneAlumnoGrupoQuery,
+  findAllAlumnoGrupoQuery,
   findAllAsignaturasQuery,
   findAllCalificacionesQuery,
 ) => async ({ alumnoId, grupoId }) => {
@@ -111,11 +136,17 @@ const findAcreditacionAlumno = (
     throw boom.conflict(`[calificaciones]: alumno ${alumnoId} does not belong to the programa of grupo ${grupoId}`);
   }
 
-  const [programa, validacion, alumnoGrupo, asignaturas, calificaciones] = await Promise.all([
+  const [
+    programa, validacion, alumnoGrupo, alumnoGrupos, asignaturas, calificaciones,
+  ] = await Promise.all([
     findOneProgramaQuery({ id: programaId }),
     findOneValidacionQuery({ alumnoId, situacionValidacionId: SITUACIONES_VALIDACION }),
     findOneAlumnoGrupoQuery({ alumnoId, grupoId }),
-    findAllAsignaturasQuery({ programaId }),
+    findAllAlumnoGrupoQuery({ alumnoId }, { include: INCLUDE_ALUMNO_GRUPOS, strict: false }),
+    findAllAsignaturasQuery({ programaId }, {
+      include: [{ association: 'grado' }],
+      strict: false,
+    }),
     findAllCalificacionesQuery({ alumnoId }, {
       include: [{ association: 'grupo', include: [{ association: 'cicloEscolar' }] }],
       strict: false,
@@ -128,12 +159,25 @@ const findAcreditacionAlumno = (
     calificaciones.map((calificacion) => calificacion.toJSON()),
   );
 
+  const conflictoDeGrado = buscarGrupoDeOtroGradoEnElCiclo(
+    alumnoGrupos.map((alumnoGrupoInstance) => alumnoGrupoInstance.toJSON()),
+    grupo,
+  );
+
+  const gradoAnterior = revisarGradoAnterior({
+    asignaturas,
+    grupo,
+    calificacionesPorAsignatura,
+  });
+
   const filas = asignaturas
     .map((asignatura) => buildFila({
       asignatura,
       calificaciones: calificacionesPorAsignatura[asignatura.id] || [],
       grupo,
       calificacionAprobatoria,
+      conflictoDeGrado,
+      gradoAnterior,
     }))
     .filter(Boolean)
     .sort((a, b) => {
@@ -164,6 +208,8 @@ const findAcreditacionAlumno = (
       turno: grupo.turno?.nombre,
     },
     inscritoEnGrupo: Boolean(alumnoGrupo),
+    avisoOtroGrado: conflictoDeGrado ? avisoConflictoDeGrado(conflictoDeGrado) : null,
+    avisoGradoAnterior: gradoAnterior ? avisoGradoAnteriorIncompleto(gradoAnterior) : null,
     habilitadoParaCaptura: motivosNoHabilitado.length === 0,
     motivosNoHabilitado,
     limites: {

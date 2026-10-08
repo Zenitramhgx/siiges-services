@@ -15,7 +15,7 @@ async function findGroupAlumnosAcreditacion(req, reply) {
     return reply
       .code(200)
       .header('Content-Type', 'application/json; charset=utf-8')
-      .send(alumnos);
+      .send({ data: alumnos });
   } catch (error) {
     return errorHandler(error, reply);
   }

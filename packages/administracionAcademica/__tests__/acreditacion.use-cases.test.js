@@ -4,29 +4,56 @@ const updateAcreditacionAlumno = require('../src/use-cases/db/alumnos/update.acr
 // Escenario: alumno 7 del programa 1 (aprobatoria 6, escala 0-10, sin decimales)
 // Grupo 10 = 2022A primer semestre, grupo 30 = 2023A tercer semestre
 const GRUPOS = {
-  10: { id: 10, gradoId: 1, cicloEscolar: { programaId: 1, nombre: '2022A' } },
+  10: {
+    id: 10,
+    gradoId: 1,
+    descripcion: 'A',
+    cicloEscolarId: 100,
+    grado: { id: 1, nombre: 'Primer semestre', numeroGrado: 1 },
+    cicloEscolar: { programaId: 1, nombre: '2022A' },
+  },
   30: {
     id: 30,
     gradoId: 3,
+    descripcion: 'B',
+    cicloEscolarId: 300,
+    grado: { id: 3, nombre: 'Tercer semestre', numeroGrado: 3 },
     cicloEscolar: { programaId: 1, nombre: '2023A' },
     generacionFechaInicio: '2023-01-15T00:00:00Z',
   },
+  // Mismo ciclo que el grupo 10 (100) pero de otro grado: caso prohibido
+  11: {
+    id: 11,
+    gradoId: 3,
+    descripcion: 'C',
+    cicloEscolarId: 100,
+    grado: { id: 3, nombre: 'Tercer semestre', numeroGrado: 3 },
+    cicloEscolar: { programaId: 1, nombre: '2022A' },
+  },
 };
+const GRADO_1 = { id: 1, nombre: 'Primer semestre', numeroGrado: 1 };
+const GRADO_3 = { id: 3, nombre: 'Tercer semestre', numeroGrado: 3 };
+const GRADO_5 = { id: 5, nombre: 'Quinto semestre', numeroGrado: 5 };
+const GRADO_FLEXIBLE = { id: 24, nombre: 'Flexible Semestral', numeroGrado: 1 };
+
 const ASIGNATURAS = [
   {
-    id: 1, clave: 'DER-101', nombre: 'Constitucional', gradoId: 1,
+    id: 1, clave: 'DER-101', nombre: 'Constitucional', gradoId: 1, grado: GRADO_1,
   },
   {
-    id: 2, clave: 'DER-102', nombre: 'Penal', gradoId: 1,
+    id: 2, clave: 'DER-102', nombre: 'Penal', gradoId: 1, grado: GRADO_1,
   },
   {
-    id: 3, clave: 'DER-103', nombre: 'Civil', gradoId: 1,
+    id: 3, clave: 'DER-103', nombre: 'Civil', gradoId: 1, grado: GRADO_1,
   },
   {
-    id: 5, clave: 'DER-301', nombre: 'Mercantil', gradoId: 3,
+    id: 5, clave: 'DER-301', nombre: 'Mercantil', gradoId: 3, grado: GRADO_3,
   },
   {
-    id: 6, clave: 'DER-302', nombre: 'Laboral', gradoId: 3,
+    id: 6, clave: 'DER-302', nombre: 'Laboral', gradoId: 3, grado: GRADO_3,
+  },
+  {
+    id: 8, clave: 'DER-501', nombre: 'Amparo', gradoId: 5, grado: GRADO_5,
   },
 ];
 
@@ -44,6 +71,9 @@ const buildDb = () => {
       },
       {
         id: 3, alumnoId: 7, grupoId: 10, asignaturaId: 2, tipo: 1, calificacion: '8',
+      },
+      {
+        id: 4, alumnoId: 7, grupoId: 10, asignaturaId: 3, tipo: 1, calificacion: '7',
       },
     ],
     alumnoGrupos: [{ id: 1, alumnoId: 7, grupoId: 10 }],
@@ -87,6 +117,9 @@ const buildDb = () => {
       .map((row) => instance({ ...row, grupo: GRUPOS[row.grupoId] })),
     findOneAlumnoGrupoQuery: async (where) => state.alumnoGrupos
       .find((row) => matches(row, where)) || null,
+    findAllAlumnoGrupoQuery: async (where) => state.alumnoGrupos
+      .filter((row) => matches(row, where))
+      .map((row) => instance({ ...row, grupo: GRUPOS[row.grupoId] })),
     createAlumnoGrupoQuery: jest.fn(async (data) => {
       const row = { id: state.alumnoGrupos.length + 1, ...data };
       state.alumnoGrupos.push(row);
@@ -117,6 +150,7 @@ const buildUseCases = (queries) => ({
     queries.findOneProgramaQuery,
     queries.findOneValidacionQuery,
     queries.findOneAlumnoGrupoQuery,
+    queries.findAllAlumnoGrupoQuery,
     queries.findAllAsignaturasQuery,
     queries.findAllCalificacionesQuery,
   ),
@@ -129,6 +163,7 @@ const buildUseCases = (queries) => ({
     queries.findAllAsignaturasQuery,
     queries.findAllCalificacionesQuery,
     queries.findOneAlumnoGrupoQuery,
+    queries.findAllAlumnoGrupoQuery,
     queries.createAlumnoGrupoQuery,
     queries.findOneCalificacionQuery,
     queries.createCalificacionQuery,
@@ -203,7 +238,7 @@ describe('updateAcreditacionAlumno', () => {
     ['asignatura ya aprobada en otro ciclo', [{
       asignaturaId: 2, tipo: 1, calificacion: '9', fechaExamen: fecha,
     }], 'ya está aprobada'],
-    ['otro grado sin intentos previos', [{ asignaturaId: 3, tipo: 1 }], 'ni está pendiente por recursar'],
+    ['otro grado sin intentos previos', [{ asignaturaId: 8, tipo: 1 }], 'ni está pendiente por recursar'],
     ['fuera de rango', [{
       asignaturaId: 5, tipo: 1, calificacion: '11', fechaExamen: fecha,
     }], 'mayor a la máxima'],
@@ -218,6 +253,65 @@ describe('updateAcreditacionAlumno', () => {
 
     await expect(update({ alumnoId: 7, grupoId: 30 }, body)).rejects.toThrow(mensaje);
     expect(queries.startTransactionQuery).not.toHaveBeenCalled();
+  });
+
+  it('rechaza cursar un segundo grado completo en el mismo ciclo', async () => {
+    const { state, queries } = buildDb();
+    const { update } = buildUseCases(queries);
+
+    // Ya cursa Primer semestre (grupo 10) en 2022A; el grupo 11 es Tercer
+    // semestre del MISMO ciclo y DER-301 es materia nueva, no un recursamiento
+    await expect(update({ alumnoId: 7, grupoId: 11 }, [
+      {
+        asignaturaId: 5, tipo: 1, calificacion: '8', fechaExamen: fecha,
+      },
+    ])).rejects.toThrow('solo puede recursar materias pendientes');
+
+    expect(queries.startTransactionQuery).not.toHaveBeenCalled();
+    expect(state.calificaciones.some((c) => c.grupoId === 11)).toBe(false);
+  });
+
+  it('sí permite recursar una materia pendiente aunque curse otro grado ese ciclo', async () => {
+    const { state, queries } = buildDb();
+    const { update } = buildUseCases(queries);
+
+    // Constitucional (1) viene reprobada de 2022A: en 2023A se recursa en el
+    // grupo 30 mientras el alumno cursa Tercer semestre
+    await update({ alumnoId: 7, grupoId: 30 }, [
+      {
+        asignaturaId: 1, tipo: 1, calificacion: '9', fechaExamen: fecha,
+      },
+    ]);
+
+    // y ahora, en ese mismo ciclo, un grupo de otro grado solo acepta recursamientos
+    state.alumnoGrupos.push({ id: 99, alumnoId: 7, grupoId: 31 });
+    GRUPOS[31] = {
+      id: 31,
+      gradoId: 5,
+      descripcion: 'D',
+      cicloEscolarId: 300,
+      grado: GRADO_5,
+      cicloEscolar: { programaId: 1, nombre: '2023A' },
+    };
+
+    await expect(update({ alumnoId: 7, grupoId: 31 }, [
+      {
+        asignaturaId: 8, tipo: 1, calificacion: '8', fechaExamen: fecha,
+      },
+    ])).rejects.toThrow('solo puede recursar materias pendientes');
+
+    delete GRUPOS[31];
+  });
+
+  it('sí permite capturar en otro grado si es de un ciclo distinto', async () => {
+    const { queries } = buildDb();
+    const { update } = buildUseCases(queries);
+
+    await expect(update({ alumnoId: 7, grupoId: 30 }, [
+      {
+        asignaturaId: 5, tipo: 1, calificacion: '8', fechaExamen: fecha,
+      },
+    ])).resolves.toBeDefined();
   });
 
   it('hace rollback si la BD falla a la mitad', async () => {
@@ -237,5 +331,144 @@ describe('updateAcreditacionAlumno', () => {
 
     expect(state.transaction.rollback).toHaveBeenCalled();
     expect(JSON.stringify({ c: state.calificaciones, g: state.alumnoGrupos })).toBe(antes);
+  });
+});
+
+describe('currícula rígida y fecha de examen', () => {
+  const sinCalificarCivil = (state) => {
+    // eslint-disable-next-line no-param-reassign
+    state.calificaciones = state.calificaciones.filter((row) => row.asignaturaId !== 3);
+  };
+
+  const manana = () => {
+    const fechaManana = new Date();
+    fechaManana.setDate(fechaManana.getDate() + 1);
+    return fechaManana.toISOString().slice(0, 10);
+  };
+
+  it('rechaza una fecha de examen posterior a hoy', async () => {
+    const { queries } = buildDb();
+    const { update } = buildUseCases(queries);
+
+    await expect(update({ alumnoId: 7, grupoId: 30 }, [
+      {
+        asignaturaId: 5, tipo: 1, calificacion: '8', fechaExamen: manana(),
+      },
+    ])).rejects.toThrow('no puede ser posterior a hoy');
+
+    expect(queries.startTransactionQuery).not.toHaveBeenCalled();
+  });
+
+  it('acepta la fecha de hoy', async () => {
+    const { queries } = buildDb();
+    const { update } = buildUseCases(queries);
+
+    await expect(update({ alumnoId: 7, grupoId: 30 }, [
+      {
+        asignaturaId: 5, tipo: 1, calificacion: '8', fechaExamen: new Date().toISOString().slice(0, 10),
+      },
+    ])).resolves.toBeDefined();
+  });
+
+  it('rígida: no deja calificar el grado si el anterior tiene materias sin calificar', async () => {
+    const { state, queries } = buildDb();
+    sinCalificarCivil(state);
+    const { update } = buildUseCases(queries);
+
+    await expect(update({ alumnoId: 7, grupoId: 30 }, [
+      {
+        asignaturaId: 5, tipo: 1, calificacion: '8', fechaExamen: fecha,
+      },
+    ])).rejects.toThrow('currícula rígida');
+
+    expect(queries.startTransactionQuery).not.toHaveBeenCalled();
+  });
+
+  it('rígida: aun así permite recursar materias del grado anterior', async () => {
+    const { state, queries } = buildDb();
+    sinCalificarCivil(state);
+    const { update } = buildUseCases(queries);
+
+    // Constitucional (1) es de Primer semestre y viene reprobada: se recursa
+    await expect(update({ alumnoId: 7, grupoId: 30 }, [
+      {
+        asignaturaId: 1, tipo: 1, calificacion: '9', fechaExamen: fecha,
+      },
+    ])).resolves.toBeDefined();
+  });
+
+  it('rígida: con el grado anterior completo sí deja calificar', async () => {
+    const { queries } = buildDb();
+    const { update } = buildUseCases(queries);
+
+    await expect(update({ alumnoId: 7, grupoId: 30 }, [
+      {
+        asignaturaId: 5, tipo: 1, calificacion: '8', fechaExamen: fecha,
+      },
+    ])).resolves.toBeDefined();
+  });
+
+  it('flexible: no exige el grado anterior', async () => {
+    const { state, queries } = buildDb();
+    sinCalificarCivil(state);
+    GRUPOS[40] = {
+      id: 40,
+      gradoId: 24,
+      descripcion: 'F',
+      cicloEscolarId: 400,
+      grado: GRADO_FLEXIBLE,
+      cicloEscolar: { programaId: 1, nombre: '2024A' },
+    };
+    const asignaturaFlexible = {
+      id: 9, clave: 'DER-F01', nombre: 'Seminario', gradoId: 24, grado: GRADO_FLEXIBLE,
+    };
+    ASIGNATURAS.push(asignaturaFlexible);
+    const { update } = buildUseCases(queries);
+
+    await expect(update({ alumnoId: 7, grupoId: 40 }, [
+      {
+        asignaturaId: 9, tipo: 1, calificacion: '8', fechaExamen: fecha,
+      },
+    ])).resolves.toBeDefined();
+
+    ASIGNATURAS.pop();
+    delete GRUPOS[40];
+  });
+
+  it('primer grado: no hay grado anterior que exigir', async () => {
+    const { state, queries } = buildDb();
+    sinCalificarCivil(state);
+    const { update } = buildUseCases(queries);
+
+    await expect(update({ alumnoId: 7, grupoId: 10 }, [
+      {
+        asignaturaId: 3, tipo: 1, calificacion: '8', fechaExamen: fecha,
+      },
+    ])).resolves.toBeDefined();
+  });
+
+  it('find: avisa del grado anterior y bloquea las filas de ese grado', async () => {
+    const { state, queries } = buildDb();
+    sinCalificarCivil(state);
+    const { find } = buildUseCases(queries);
+
+    const result = await find({ alumnoId: 7, grupoId: 30 });
+
+    expect(result.avisoGradoAnterior).toContain('currícula rígida');
+    expect(result.avisoGradoAnterior).toContain('DER-103 Civil');
+
+    const porClave = Object.fromEntries(result.asignaturas.map((a) => [a.clave, a]));
+    expect(porClave['DER-301'].bloqueada).toBe(true);
+    expect(porClave['DER-101'].bloqueada).toBe(false);
+  });
+
+  it('find: sin pendientes del grado anterior no hay aviso ni bloqueo', async () => {
+    const { queries } = buildDb();
+    const { find } = buildUseCases(queries);
+
+    const result = await find({ alumnoId: 7, grupoId: 30 });
+
+    expect(result.avisoGradoAnterior).toBeNull();
+    expect(result.asignaturas.every((a) => a.bloqueada === false)).toBe(true);
   });
 });

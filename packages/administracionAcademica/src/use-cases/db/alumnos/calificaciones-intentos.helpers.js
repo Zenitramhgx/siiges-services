@@ -57,6 +57,39 @@ const fechaEnMs = (valor) => {
 };
 
 /**
+ * Normaliza una fecha a YYYY-MM-DD. Devuelve null si no es una fecha válida.
+ * Las fechas de examen se capturan por día, sin hora.
+ */
+const fechaISO = (valor) => {
+  if (valorVacio(valor)) return null;
+
+  if (valor instanceof Date) {
+    return Number.isNaN(valor.getTime()) ? null : valor.toISOString().slice(0, 10);
+  }
+
+  const texto = String(valor).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(texto)) {
+    const soloFecha = texto.slice(0, 10);
+    return Number.isNaN(new Date(`${soloFecha}T00:00:00Z`).getTime()) ? null : soloFecha;
+  }
+
+  const fecha = new Date(texto);
+  return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString().slice(0, 10);
+};
+
+const fechaDeHoy = () => {
+  const hoy = new Date();
+  const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+  const dia = String(hoy.getDate()).padStart(2, '0');
+  return `${hoy.getFullYear()}-${mes}-${dia}`;
+};
+
+const esFechaFutura = (valor) => {
+  const fecha = fechaISO(valor);
+  return fecha !== null && fecha > fechaDeHoy();
+};
+
+/**
  * Ordena por fecha de examen cuando ambos intentos la tienen; si a alguno le
  * falta (recursamiento recién inscrito), manda el ciclo escolar.
  */
@@ -156,6 +189,9 @@ module.exports = {
   esAprobatoria,
   esReprobatoriaNumerica,
   compararCiclos,
+  fechaISO,
+  fechaDeHoy,
+  esFechaFutura,
   agruparIntentos,
   agruparPorAsignatura,
   intentoAprobado,
