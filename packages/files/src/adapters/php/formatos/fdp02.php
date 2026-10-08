@@ -440,16 +440,18 @@ $totCredCarrera = 0;
 
 if (is_array($asignaturas) && count($asignaturas)) {
   usort($asignaturas, function ($a, $b) {
-    $ga = (int) ($a['gradoId'] ?? 0);
-    $gb = (int) ($b['gradoId'] ?? 0);
-    if ($ga !== $gb)
-      return $ga <=> $gb;
-    $oa = (int) ($a['orden'] ?? 9999);
-    $ob = (int) ($b['orden'] ?? 9999);
-    if ($oa !== $ob)
-      return $oa <=> $ob;
-    return strcmp(mb_strtoupper($a['nombre'] ?? ''), mb_strtoupper($b['nombre'] ?? ''));
-  });
+  $ca = isset($a['consecutivo']) ? (int) $a['consecutivo'] : PHP_INT_MAX;
+  $cb = isset($b['consecutivo']) ? (int) $b['consecutivo'] : PHP_INT_MAX;
+  if ($ca !== $cb)
+    return $ca <=> $cb;
+
+  $ga = (int) ($a['gradoId'] ?? 0);
+  $gb = (int) ($b['gradoId'] ?? 0);
+  if ($ga !== $gb)
+    return $ga <=> $gb;
+
+  return strcmp(mb_strtoupper($a['nombre'] ?? ''), mb_strtoupper($b['nombre'] ?? ''));
+});
 
   $porSem = [];
   $nombreGradoPorId = [];
@@ -462,6 +464,7 @@ if (is_array($asignaturas) && count($asignaturas)) {
       }
     }
   }
+  ksort($porSem);
 
   $colWidths = [25, 40, 15, 20, 18, 18, 15, 23];
   $encabezados = [
