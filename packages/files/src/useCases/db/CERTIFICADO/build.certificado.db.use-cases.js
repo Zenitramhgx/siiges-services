@@ -1,5 +1,8 @@
 const { checkers } = require('@siiges-services/shared');
 
+const GRADOS_FLEXIBLES_IDS = [23, 24];
+const GRADO_OPTATIVA_ID = 25;
+
 const formatDateDMY = (value) => {
   if (!value) return null;
 
@@ -121,9 +124,6 @@ const buildFileCertificado = (
     return valor;
   };
 
-  // Agrupa TODAS las calificaciones del alumno por asignaturaId (puede haber
-  // varias: ordinario reprobado, extraordinario, recursada en otro ciclo).
-  // Se usa para PINTAR la tabla: cada intento es su propia fila.
   const calificacionesTodasPorAsignaturaId = {};
   calificaciones.forEach((c) => {
     if (!calificacionesTodasPorAsignaturaId[c.asignaturaId]) {
@@ -132,13 +132,6 @@ const buildFileCertificado = (
     calificacionesTodasPorAsignaturaId[c.asignaturaId].push(c);
   });
 
-  // Calificación VIGENTE por asignatura (se usa solo para el promedio):
-  // 1. Si existe algún intento aprobado (numérico >= calificación
-  //    aprobatoria), la vigente es el aprobado MÁS RECIENTE por fechaExamen.
-  //    Así una recursada aprobada gana sobre un ordinario reprobado y sobre
-  //    un extraordinario no numérico (ej. "RC").
-  // 2. Si no hay ninguno aprobado, la vigente es el intento MÁS RECIENTE
-  //    (en empate de fecha, el extraordinario va después del ordinario).
   const calificacionAprobatoriaNum = Number(
     folioDocAlumno.alumno.programa?.calificacionAprobatoria,
   ) || 0;
@@ -154,7 +147,6 @@ const buildFileCertificado = (
 
   const valorNumerico = (c) => Number(procesarCalificacionCruda(c.calificacion));
 
-  // Ciclo escolar como respaldo cuando a algún intento le falta fechaExamen
   const compararCiclos = (a = '', b = '') => {
     const anioCompare = a.substring(0, 4).localeCompare(b.substring(0, 4));
     if (anioCompare !== 0) return anioCompare;
@@ -181,8 +173,6 @@ const buildFileCertificado = (
     return (a.id || 0) - (b.id || 0);
   };
 
-  // Las filas de cada asignatura salen en orden cronológico:
-  // ordinario antes que extraordinario dentro del mismo intento.
   Object.values(calificacionesTodasPorAsignaturaId).forEach((lista) => {
     lista.sort(compararIntentos);
   });
@@ -197,8 +187,9 @@ const buildFileCertificado = (
       return !Number.isNaN(n) && n >= calificacionAprobatoriaNum;
     });
 
+    // Gana la PRIMERA aprobatoria; lo capturado después no debió existir
     calificacionVigentePorAsignaturaId[asignaturaId] = aprobados.length > 0
-      ? aprobados[aprobados.length - 1]
+      ? aprobados[0]
       : intentos[intentos.length - 1];
   });
 
@@ -247,9 +238,6 @@ const buildFileCertificado = (
     }
   });
 
-  // Asignaturas OPTATIVAS (tipo=2 en el catálogo): bloque aparte
-  // "OPTATIVAS ASIGNADAS" al final, con TODOS sus datos reales. Se pinta
-  // cada intento como su propia fila (igual que las obligatorias).
   const asignaturasOptativas = [];
   const asignaturaIdsOptativas = new Set();
 
@@ -297,8 +285,49 @@ const buildFileCertificado = (
     });
   });
 
+  const tipoCertificado = folioDocAlumno?.solicitudFolioAlumno
+    ?.solicitudFolio?.tipoSolicitudFolio?.descripcion;
+
+  const esCertificadoParcial = String(tipoCertificado || '').trim().toUpperCase() === 'PARCIAL';
+
+  const esGradoFlexible = (grado) => GRADOS_FLEXIBLES_IDS.includes(Number(grado.gradoId))
+    || String(grado.gradoNombre || '').toUpperCase().includes('FLEXIBLE');
+
+  const esGradoOptativo = (grado) => grado.gradoId === 'OPTATIVA'
+    || Number(grado.gradoId) === GRADO_OPTATIVA_ID
+    || String(grado.gradoNombre || '').toUpperCase().includes('OPTATIVA');
+
+  const gradoEstaCompleto = (grado) => grado.asignaturas.every(
+    (asignatura) => asignatura.sinCalificacion !== true
+      && String(asignatura.calificacion ?? '').trim() !== '',
+  );
+
+  const gradosRigidosIncompletos = Object.values(calificacionesPorGrado)
+    .filter((grado) => !esGradoFlexible(grado) && !esGradoOptativo(grado))
+    .filter((grado) => !gradoEstaCompleto(grado))
+    .map((grado) => grado.gradoNumero);
+
+  const primerGradoIncompleto = gradosRigidosIncompletos.length > 0
+    ? Math.min(...gradosRigidosIncompletos)
+    : null;
+
+  const aplicaCorteParcial = esCertificadoParcial && primerGradoIncompleto !== null;
+
+  const gradoSeIncluye = (grado) => !aplicaCorteParcial
+    || esGradoFlexible(grado)
+    || esGradoOptativo(grado)
+    || grado.gradoNumero < primerGradoIncompleto;
+
   const gradosOrdenados = Object.values(calificacionesPorGrado)
+    .filter(gradoSeIncluye)
     .sort((a, b) => a.gradoNumero - b.gradoNumero);
+
+  const asignaturaIdsIncluidas = new Set();
+  gradosOrdenados.forEach((grado) => {
+    grado.asignaturas.forEach((asignatura) => {
+      asignaturaIdsIncluidas.add(asignatura.asignaturaId);
+    });
+  });
 
   const obtenerCalificacionesNumericasVigentes = (asignaturaIds) => asignaturaIds
     .map((asignaturaId) => {
@@ -313,22 +342,51 @@ const buildFileCertificado = (
     })
     .filter((n) => n !== null && !Number.isNaN(n) && n > 0);
 
-  // Promedio sobre OBLIGATORIAS + OPTATIVAS, una sola vez por asignatura
-  // (asignaturaIdsOptativas es un Set para no contar dos veces una optativa
-  // que tenga varios intentos).
   const calificacionesNumericasObligatorias = obtenerCalificacionesNumericasVigentes(
-    asignaturasPrograma.map((asignatura) => asignatura.id),
+    asignaturasPrograma
+      .map((asignatura) => asignatura.id)
+      .filter((asignaturaId) => asignaturaIdsIncluidas.has(asignaturaId)),
   );
   const calificacionesNumericasOptativas = obtenerCalificacionesNumericasVigentes(
-    Array.from(asignaturaIdsOptativas),
+    Array.from(asignaturaIdsOptativas)
+      .filter((asignaturaId) => asignaturaIdsIncluidas.has(asignaturaId)),
   );
   const calificacionesNumericasTotales = [
     ...calificacionesNumericasObligatorias,
     ...calificacionesNumericasOptativas,
   ];
 
-  // Formato: sin decimales solo si es nota perfecta (igual a la calificación
-  // máxima del programa); en cualquier otro caso se TRUNCA a 2 decimales.
+  const creditosPorAsignaturaId = {};
+  asignaturasPrograma.forEach((asignatura) => {
+    creditosPorAsignaturaId[asignatura.id] = Number(asignatura.creditos) || 0;
+  });
+  calificaciones.forEach((c) => {
+    if (creditosPorAsignaturaId[c.asignaturaId] === undefined) {
+      creditosPorAsignaturaId[c.asignaturaId] = Number(c.asignatura?.creditos) || 0;
+    }
+  });
+
+  const vigenteAcredita = (asignaturaId) => {
+    const vigente = calificacionVigentePorAsignaturaId[asignaturaId];
+    if (!vigente) return false;
+
+    const calProcesada = procesarCalificacionCruda(vigente.calificacion);
+    const valor = Number(calProcesada);
+    return !Number.isNaN(valor) && valor >= calificacionAprobatoriaNum;
+  };
+
+  const asignaturasAcreditadas = asignaturasPrograma
+    .filter((asignatura) => asignaturaIdsIncluidas.has(asignatura.id))
+    .filter((asignatura) => vigenteAcredita(asignatura.id)).length;
+
+  const creditosObtenidos = [
+    ...asignaturasPrograma.map((asignatura) => asignatura.id),
+    ...Array.from(asignaturaIdsOptativas),
+  ]
+    .filter((asignaturaId) => asignaturaIdsIncluidas.has(asignaturaId))
+    .filter(vigenteAcredita)
+    .reduce((suma, asignaturaId) => suma + (creditosPorAsignaturaId[asignaturaId] || 0), 0);
+
   let promedioGeneral = 'N/A';
   if (calificacionesNumericasTotales.length > 0) {
     const promedioNumerico = calificacionesNumericasTotales.reduce((sum, n) => sum + n, 0)
@@ -353,7 +411,6 @@ const buildFileCertificado = (
     .filter(Boolean)
     .sort((a, b) => new Date(a) - new Date(b))[0] || null;
 
-  // fechaTerminacion: fechaExamen MÁS RECIENTE entre todas las calificaciones.
   const fechaTerminacionRaw = calificaciones
     .map((c) => c.fechaExamen)
     .filter(Boolean)
@@ -374,6 +431,10 @@ const buildFileCertificado = (
     municipio: folioDocAlumno.alumno.programa.plantel.domicilio.municipio.nombre,
     fechaInicio: formatDateDMY(fechaInicioRaw),
     fechaTerminacion: formatDateDMY(fechaTerminacionRaw),
+    fechaSolicitudFolio: formatDateDMY(
+      folioDocAlumno?.solicitudFolioAlumno?.solicitudFolio?.fecha
+        || folioDocAlumno?.solicitudFolioAlumno?.solicitudFolio?.createdAt,
+    ),
     fechaExamen: formatDateDMY(folioDocAlumno?.solicitudFolioAlumno?.fechaExamenProfesional
       || folioDocAlumno?.solicitudFolioAlumno?.fechaExencionExamenProfesional),
     fechaExpedicion: formatDateDMY(fechaExpedicionFinal),
@@ -381,13 +442,14 @@ const buildFileCertificado = (
     rvoe: folioDocAlumno.alumno.programa.acuerdoRvoe,
     fechaRvoe: formatDateDMY(folioDocAlumno.alumno.programa.fechaSurteEfecto),
     totalAsignaturas: asignaturasPrograma.length,
+    asignaturasAcreditadas,
+    creditosObtenidos,
     promedioGeneral,
     director:
       folioDocAlumno.alumno.programa.plantel.director
       || 'DIRECTOR DEL PLANTEL',
     grados: gradosOrdenados,
-    tipoCertificado: folioDocAlumno?.solicitudFolioAlumno
-      ?.solicitudFolio?.tipoSolicitudFolio?.descripcion,
+    tipoCertificado,
     libro: folioDocAlumno.libro?.nombre,
     foja: folioDocAlumno.foja?.nombre,
     creditosPrograma: folioDocAlumno.alumno.programa?.creditos,

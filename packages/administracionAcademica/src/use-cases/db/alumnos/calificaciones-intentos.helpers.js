@@ -8,9 +8,6 @@
 const TIPO_ORDINARIO = 1;
 const TIPO_EXTRAORDINARIO = 2;
 
-// Valores no numéricos que cuentan como acreditados
-const VALORES_LETRA_ACREDITADA = ['A'];
-
 const valorVacio = (valor) => valor === null || valor === undefined || String(valor).trim() === '';
 
 // Datos legados tipo "8 (OCHO)" → "8"
@@ -21,14 +18,58 @@ const procesarCalificacionCruda = (valor) => {
   return valor;
 };
 
-const esLetraAcreditada = (valor) => !valorVacio(valor)
-  && VALORES_LETRA_ACREDITADA.includes(String(valor).trim().toUpperCase());
+/**
+ * Las calificaciones son numéricas. Un texto solo aparece en extraordinario
+ * (RC, NS, NP, SD...) y siempre significa que NO acreditó, así que nunca
+ * puede ser aprobatorio.
+ */
+const esTextoNoNumerico = (valor) => !valorVacio(valor)
+  && Number.isNaN(Number(String(procesarCalificacionCruda(valor)).trim()));
+
+/**
+ * Catálogo cerrado de claves de extraordinario. En la base solo se guardan
+ * las dos letras; el texto largo existe nada más para la pantalla.
+ */
+const CODIGOS_EXTRAORDINARIO = {
+  NS: 'No solicitó',
+  NP: 'No presentó',
+  RC: 'Recursar',
+  SD: 'Sin derecho',
+};
+
+const CLAVES_EXTRAORDINARIO = Object.keys(CODIGOS_EXTRAORDINARIO);
+
+const PATRON_CLAVE_EXTRAORDINARIO = new RegExp(`^(${CLAVES_EXTRAORDINARIO.join('|')})(\\s|\\(|$)`);
+
+/**
+ * Clave de dos letras de un valor de extraordinario. Acepta lo que ya está
+ * capturado en texto largo ("NS (No solicitó)") y devuelve null si el valor
+ * no es una de las cuatro claves.
+ */
+const claveExtraordinario = (valor) => {
+  if (valorVacio(valor)) return null;
+  const encontrado = String(valor).trim().toUpperCase().match(PATRON_CLAVE_EXTRAORDINARIO);
+  return encontrado ? encontrado[1] : null;
+};
+
+const textoClaveExtraordinario = (clave) => CODIGOS_EXTRAORDINARIO[clave] || '';
+
+/**
+ * Valor con el que se guarda una calificación: el número tal cual, o la clave
+ * de dos letras si es un texto del catálogo. Un texto que no está en el
+ * catálogo se devuelve sin cambios para que la validación lo rechace.
+ */
+const normalizarCalificacion = (valor, tipo) => {
+  if (valorVacio(valor)) return null;
+  const texto = String(valor).trim();
+  if (!esTextoNoNumerico(texto)) return String(procesarCalificacionCruda(texto)).trim();
+  if (Number(tipo) !== TIPO_EXTRAORDINARIO) return texto;
+  return claveExtraordinario(texto) || texto;
+};
 
 const esAprobatoria = (valor, calificacionAprobatoria) => {
   if (valorVacio(valor)) return false;
-  const procesada = String(procesarCalificacionCruda(valor)).trim();
-  if (esLetraAcreditada(procesada)) return true;
-  const numero = Number(procesada);
+  const numero = Number(String(procesarCalificacionCruda(valor)).trim());
   return !Number.isNaN(numero) && numero >= calificacionAprobatoria;
 };
 
@@ -138,14 +179,19 @@ const algunIntentoAprobado = (intentos, calificacionAprobatoria) => intentos
  * el último intento con valor capturado (su extraordinario si lo tiene).
  * Misma regla que fhistorial.php y build.certificado.db.use-cases.js.
  */
+/**
+ * Gana la PRIMERA aprobatoria: en cuanto el alumno acredita, esa es la que
+ * vale y lo que se haya capturado después no debió existir. Dentro de un
+ * intento el ordinario va antes que el extraordinario.
+ */
 const resolverVigente = (intentos, calificacionAprobatoria) => {
-  const aprobado = [...intentos].reverse()
+  const aprobado = intentos
     .find((intento) => intentoAprobado(intento, calificacionAprobatoria));
 
   if (aprobado) {
-    return esAprobatoria(aprobado.extraordinario?.calificacion, calificacionAprobatoria)
-      ? aprobado.extraordinario
-      : aprobado.ordinario;
+    return esAprobatoria(aprobado.ordinario?.calificacion, calificacionAprobatoria)
+      ? aprobado.ordinario
+      : aprobado.extraordinario;
   }
 
   const conValor = [...intentos].reverse().find((intento) => !valorVacio(
@@ -174,6 +220,31 @@ const clasificarIntentos = (intentos, grupo) => {
   return { intentoActual, otrosIntentos, intentosAnteriores };
 };
 
+/**
+ * El intento quedó abierto: el alumno reprobó el ordinario y no hay
+ * extraordinario capturado. Es el mismo criterio con el que el historial
+ * imprime la materia bajo ASIGNATURAS PENDIENTES.
+ */
+const requiereExtraordinario = (intentos, calificacionAprobatoria) => {
+  if (intentos.length === 0) return false;
+  if (algunIntentoAprobado(intentos, calificacionAprobatoria)) return false;
+
+  const ultimo = intentos[intentos.length - 1];
+  if (!valorVacio(ultimo.extraordinario?.calificacion)) return false;
+
+  const valor = ultimo.ordinario?.calificacion;
+  return !valorVacio(valor) && !Number.isNaN(Number(String(valor).trim()));
+};
+
+/**
+ * Calificaciones aprobatorias de una misma asignatura. Más de una significa
+ * que se capturó un extraordinario o un recursamiento que no debía existir.
+ */
+const calificacionesAprobatorias = (intentos, calificacionAprobatoria) => intentos
+  .flatMap((intento) => [intento.ordinario, intento.extraordinario])
+  .filter((calificacion) => calificacion
+    && esAprobatoria(calificacion.calificacion, calificacionAprobatoria));
+
 const agruparPorAsignatura = (calificaciones = []) => calificaciones.reduce((acc, calificacion) => {
   acc[calificacion.asignaturaId] = [...(acc[calificacion.asignaturaId] || []), calificacion];
   return acc;
@@ -182,10 +253,14 @@ const agruparPorAsignatura = (calificaciones = []) => calificaciones.reduce((acc
 module.exports = {
   TIPO_ORDINARIO,
   TIPO_EXTRAORDINARIO,
-  VALORES_LETRA_ACREDITADA,
   valorVacio,
   procesarCalificacionCruda,
-  esLetraAcreditada,
+  esTextoNoNumerico,
+  CODIGOS_EXTRAORDINARIO,
+  CLAVES_EXTRAORDINARIO,
+  claveExtraordinario,
+  textoClaveExtraordinario,
+  normalizarCalificacion,
   esAprobatoria,
   esReprobatoriaNumerica,
   compararCiclos,
@@ -197,5 +272,7 @@ module.exports = {
   intentoAprobado,
   algunIntentoAprobado,
   resolverVigente,
+  requiereExtraordinario,
+  calificacionesAprobatorias,
   clasificarIntentos,
 };

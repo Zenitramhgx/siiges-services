@@ -23,8 +23,10 @@ const findAllAlumnosExtraordinarios = require('./find.alumnos-extraordinarios.us
 const updateAlumnosSituacion = require('./update-alumnos-situacion.use-cases');
 const updateAlumnosEgreso = require('./update-alumnos-egreso.use-cases');
 const findGroupAlumnosAcreditacion = require('./find-group.alumnos-acreditacion.use-cases');
+const findGruposAlumnoAcreditacion = require('./find-group.grupos-alumno-acreditacion.use-cases');
 const findAcreditacionAlumno = require('./find.acreditacion-alumno.use-cases');
 const updateAcreditacionAlumno = require('./update.acreditacion-alumno.use-cases');
+const deleteCalificacionAlumno = require('./delete.calificacion-alumno.use-cases');
 
 module.exports = {
   createAlumno: createAlumno(
@@ -148,6 +150,11 @@ module.exports = {
     programas.findOneProgramaQuery,
     alumnos.findAllAlumnosQuery,
   ),
+  findGruposAlumnoAcreditacion: findGruposAlumnoAcreditacion(
+    alumnos.findOneAlumnoQuery,
+    alumnos.findAllAlumnoGrupoQuery,
+    alumnos.findAllCalificacionesQuery,
+  ),
   findAcreditacionAlumno: findAcreditacionAlumno(
     grupos.findOneGrupoQuery,
     alumnos.findOneAlumnoQuery,
@@ -157,6 +164,13 @@ module.exports = {
     alumnos.findAllAlumnoGrupoQuery,
     alumnos.findAllAsignaturasQuery,
     alumnos.findAllCalificacionesQuery,
+  ),
+  deleteCalificacionAlumno: deleteCalificacionAlumno(
+    alumnos.startTransactionQuery,
+    grupos.findOneGrupoQuery,
+    alumnos.findOneAlumnoQuery,
+    alumnos.findAllCalificacionesQuery,
+    alumnos.updateCalificacionQuery,
   ),
   updateAcreditacionAlumno: updateAcreditacionAlumno(
     alumnos.startTransactionQuery,

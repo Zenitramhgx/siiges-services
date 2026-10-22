@@ -51,6 +51,9 @@ const findAcreditacionAlumnoSchema = {
             inscritoEnGrupo: { type: 'boolean' },
             avisoOtroGrado: { type: 'string', nullable: true },
             avisoGradoAnterior: { type: 'string', nullable: true },
+            avisoSeriacion: { type: 'string', nullable: true },
+            avisoRevision: { type: 'string', nullable: true },
+            avisoFaltaExtraordinario: { type: 'string', nullable: true },
             habilitadoParaCaptura: { type: 'boolean' },
             motivosNoHabilitado: { type: 'array', items: { type: 'string' } },
             limites: {
@@ -81,6 +84,26 @@ const findAcreditacionAlumnoSchema = {
                   extraordinario: calificacionDto,
                   bloqueada: { type: 'boolean' },
                   motivoBloqueo: { type: 'string', nullable: true },
+                  motivoBloqueoClave: { type: 'string', nullable: true },
+                  requiereRevision: { type: 'boolean' },
+                  faltaExtraordinario: { type: 'boolean' },
+                  seriacionPendiente: { type: 'array', items: { type: 'string' } },
+                  ubicaciones: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        grupoId: { type: 'integer' },
+                        descripcion: { type: 'string', nullable: true },
+                        cicloEscolarId: { type: 'integer', nullable: true },
+                        ciclo: { type: 'string', nullable: true },
+                        gradoId: { type: 'integer', nullable: true },
+                        grado: { type: 'string', nullable: true },
+                        esActual: { type: 'boolean' },
+                        esVigente: { type: 'boolean' },
+                      },
+                    },
+                  },
                   intentosPrevios: {
                     type: 'array',
                     items: {

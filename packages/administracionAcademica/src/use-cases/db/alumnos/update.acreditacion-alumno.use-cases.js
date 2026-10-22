@@ -4,7 +4,10 @@ const {
   TIPO_ORDINARIO,
   TIPO_EXTRAORDINARIO,
   valorVacio,
-  esLetraAcreditada,
+  esTextoNoNumerico,
+  CLAVES_EXTRAORDINARIO,
+  claveExtraordinario,
+  normalizarCalificacion,
   esAprobatoria,
   esReprobatoriaNumerica,
   fechaISO,
@@ -16,7 +19,7 @@ const {
   clasificarIntentos,
 } = require('./calificaciones-intentos.helpers');
 const {
-  buscarGrupoDeOtroGradoEnElCiclo,
+  buscarGradoEnCursoEnElCiclo,
   mensajeConflictoDeGrado,
   INCLUDE_ALUMNO_GRUPOS,
 } = require('./grupos-alumno.helpers');
@@ -24,6 +27,11 @@ const {
   revisarGradoAnterior,
   mensajeGradoAnteriorIncompleto,
 } = require('./curricula-grados.helpers');
+const {
+  indexarAsignaturasPorClave,
+  revisarSeriacion,
+  mensajeSeriacionPendiente,
+} = require('./seriacion.helpers');
 
 const SITUACION_ALUMNO_ACTIVO = 1;
 const SITUACIONES_VALIDACION = [1, 3];
@@ -62,12 +70,25 @@ const validateAlumno = async ({
 
 // ─── Validaciones de cada renglón ────────────────────────────────────────────
 
-const validarValorCalificacion = (valor, programa) => {
+/**
+ * Las calificaciones son numéricas. Solo el extraordinario admite un texto, y
+ * únicamente una de las cuatro claves del catálogo, que siempre significan
+ * que no acreditó. Se guarda la clave de dos letras.
+ */
+const validarValorCalificacion = (valor, programa, tipo) => {
   if (valorVacio(valor)) return null;
-  if (esLetraAcreditada(valor)) return null;
+
+  if (esTextoNoNumerico(valor)) {
+    if (Number(tipo) !== TIPO_EXTRAORDINARIO) {
+      return `la calificación del ordinario debe ser numérica, llegó "${valor}"`;
+    }
+    return claveExtraordinario(valor)
+      ? null
+      : `la calificación "${valor}" no es válida para extraordinario;`
+        + ` solo se admite un número o ${CLAVES_EXTRAORDINARIO.join(', ')}`;
+  }
 
   const numero = Number(String(valor).trim());
-  if (Number.isNaN(numero)) return `calificación "${valor}" no es válida`;
 
   const minima = Number(programa.calificacionMinima);
   const maxima = Number(programa.calificacionMaxima);
@@ -100,6 +121,12 @@ const ordinarioResultante = ({ payloadPorClave, asignaturaId, intentoActual }) =
   return intentoActual?.ordinario?.calificacion ?? null;
 };
 
+const extraordinarioResultante = ({ payloadPorClave, asignaturaId, intentoActual }) => {
+  const enPayload = payloadPorClave[`${asignaturaId}-${TIPO_EXTRAORDINARIO}`];
+  if (enPayload) return enPayload.calificacion;
+  return intentoActual?.extraordinario?.calificacion ?? null;
+};
+
 const validarItem = ({
   item,
   asignatura,
@@ -109,6 +136,8 @@ const validarItem = ({
   payloadPorClave,
   conflictoDeGrado,
   gradoAnterior,
+  asignaturasPorClave,
+  calificacionesPorAsignatura,
 }) => {
   if (!asignatura) {
     return [`Asignatura ${item.asignaturaId}: no pertenece al programa`];
@@ -145,7 +174,23 @@ const validarItem = ({
     errores.push(mensajeGradoAnteriorIncompleto(gradoAnterior));
   }
 
-  const errorValor = validarValorCalificacion(item.calificacion, programa);
+  // Currícula flexible: la seriación. Solo cuando la asignatura se cursaría
+  // por primera vez en este grupo; corregir una captura que ya existe o
+  // recursar no se bloquean.
+  if (!intentoActual && intentosAnteriores.length === 0) {
+    const seriacionPendiente = revisarSeriacion({
+      asignatura,
+      grupo,
+      asignaturasPorClave,
+      calificacionesPorAsignatura,
+      calificacionAprobatoria: aprobatoria,
+    });
+    if (seriacionPendiente.length > 0) {
+      errores.push(mensajeSeriacionPendiente(seriacionPendiente));
+    }
+  }
+
+  const errorValor = validarValorCalificacion(item.calificacion, programa, tipo);
   if (errorValor) errores.push(errorValor);
 
   if (!valorVacio(item.calificacion) && valorVacio(item.fechaExamen)) {
@@ -228,7 +273,7 @@ const upsertCalificacion = async ({
 }) => {
   const tipo = Number(item.tipo);
   const cambios = {
-    calificacion: valorVacio(item.calificacion) ? null : String(item.calificacion).trim(),
+    calificacion: normalizarCalificacion(item.calificacion, tipo),
     fechaExamen: valorVacio(item.fechaExamen) ? null : item.fechaExamen,
   };
 
@@ -254,6 +299,67 @@ const upsertCalificacion = async ({
 };
 
 // ─── Use-case ────────────────────────────────────────────────────────────────
+
+/**
+ * Ninguna materia del grupo puede quedar con el intento abierto: si el
+ * ordinario no acredita, tiene que haber extraordinario, aunque sea un RC o
+ * un NS. Se revisan TODAS las materias con captura en este grupo, no solo
+ * las que vienen en el envío, para no dejar pendientes a medias.
+ */
+const asignaturasConIntentoAbierto = ({
+  asignaturasPorId,
+  calificacionesPorAsignatura,
+  calificacionesDelGrupo,
+  payloadPorClave,
+  grupo,
+  aprobatoria,
+}) => {
+  const asignaturaIds = Array.from(new Set([
+    ...calificacionesDelGrupo.map((calificacion) => calificacion.asignaturaId),
+    ...Object.values(payloadPorClave).map((item) => item.asignaturaId),
+  ]));
+
+  return asignaturaIds
+    .filter((asignaturaId) => {
+      const { intentoActual } = clasificarIntentos(
+        agruparIntentos(calificacionesPorAsignatura[asignaturaId] || []),
+        grupo,
+      );
+      const ordinario = ordinarioResultante({ payloadPorClave, asignaturaId, intentoActual });
+      const extraordinario = extraordinarioResultante({
+        payloadPorClave, asignaturaId, intentoActual,
+      });
+
+      return esReprobatoriaNumerica(ordinario, aprobatoria) && valorVacio(extraordinario);
+    })
+    .map((asignaturaId) => {
+      const asignatura = asignaturasPorId[asignaturaId];
+      return asignatura ? `${asignatura.clave} ${asignatura.nombre}` : `asignatura ${asignaturaId}`;
+    });
+};
+
+/**
+ * Extraordinarios del grupo que siguen guardados con el texto largo
+ * ("NS (No solicitó)") y que nadie tocó en este envío. Al guardar cualquier
+ * cosa del grupo se dejan con la clave de dos letras, para que la base
+ * termine con un solo formato.
+ *
+ * Solo se toca lo que sí es una de las cuatro claves: cualquier otro texto
+ * viejo se queda como está, para no inventarle un valor.
+ */
+const normalizacionesPendientes = ({ calificacionesDelGrupo, payloadPorClave }) => (
+  calificacionesDelGrupo
+    .filter((calificacion) => Number(calificacion.tipo) === TIPO_EXTRAORDINARIO)
+    .filter((calificacion) => !payloadPorClave[
+      `${calificacion.asignaturaId}-${TIPO_EXTRAORDINARIO}`
+    ])
+    .map((calificacion) => ({
+      id: calificacion.id,
+      actual: String(calificacion.calificacion ?? '').trim(),
+      clave: claveExtraordinario(calificacion.calificacion),
+    }))
+    .filter((pendiente) => pendiente.clave && pendiente.clave !== pendiente.actual)
+);
 
 /**
  * Inscribe y califica asignaturas de UN alumno en UN grupo.
@@ -305,18 +411,19 @@ const updateAcreditacionAlumno = (
   ]);
 
   // Si ya cursa otro grado en este ciclo, aquí solo se permiten recursamientos
-  const conflictoDeGrado = buscarGrupoDeOtroGradoEnElCiclo(
+  const calificacionesJson = calificaciones.map((calificacion) => calificacion.toJSON());
+
+  const conflictoDeGrado = buscarGradoEnCursoEnElCiclo(
     alumnoGrupos.map((alumnoGrupo) => alumnoGrupo.toJSON()),
     grupo,
+    calificacionesJson,
   );
 
   const asignaturasPorId = asignaturas.reduce((acc, asignatura) => {
     acc[asignatura.id] = asignatura;
     return acc;
   }, {});
-  const calificacionesPorAsignatura = agruparPorAsignatura(
-    calificaciones.map((calificacion) => calificacion.toJSON()),
-  );
+  const calificacionesPorAsignatura = agruparPorAsignatura(calificacionesJson);
 
   // Se valida TODO antes de abrir la transacción y se reportan todos los errores juntos
   const gradoAnterior = revisarGradoAnterior({
@@ -324,6 +431,8 @@ const updateAcreditacionAlumno = (
     grupo,
     calificacionesPorAsignatura,
   });
+
+  const asignaturasPorClave = indexarAsignaturasPorClave(asignaturas);
 
   const errores = dataArray.flatMap((item) => validarItem({
     item,
@@ -334,14 +443,40 @@ const updateAcreditacionAlumno = (
     payloadPorClave,
     conflictoDeGrado,
     gradoAnterior,
+    asignaturasPorClave,
+    calificacionesPorAsignatura,
   }));
 
   if (errores.length > 0) {
     throw boom.badRequest(errores.join(' | '));
   }
 
+  const calificacionesDelGrupo = calificacionesJson.filter(
+    (calificacion) => Number(calificacion.grupoId) === Number(grupoId),
+  );
+
+  const abiertas = asignaturasConIntentoAbierto({
+    asignaturasPorId,
+    calificacionesPorAsignatura,
+    calificacionesDelGrupo,
+    payloadPorClave,
+    grupo,
+    aprobatoria: Number(programa.calificacionAprobatoria) || 0,
+  });
+
+  if (abiertas.length > 0) {
+    throw boom.badRequest(
+      '[calificaciones]: estas asignaturas quedarían con el ordinario reprobado y sin'
+      + ` extraordinario: ${abiertas.join(', ')}.`
+      + ` Captura el extraordinario (un número o una clave: ${CLAVES_EXTRAORDINARIO.join(', ')})`
+      + ' o corrige el ordinario a una calificación aprobatoria.',
+    );
+  }
+
   // Ordinarios antes que extraordinarios, para que el extra encuentre su ordinario
   const itemsOrdenados = [...dataArray].sort((a, b) => Number(a.tipo) - Number(b.tipo));
+
+  const porNormalizar = normalizacionesPendientes({ calificacionesDelGrupo, payloadPorClave });
 
   const transaction = await startTransactionQuery();
   try {
@@ -358,6 +493,15 @@ const updateAcreditacionAlumno = (
       item,
       transaction,
     })), Promise.resolve());
+
+    await porNormalizar.reduce(
+      (promesa, pendiente) => promesa.then(() => updateCalificacionQuery(
+        { id: pendiente.id },
+        { calificacion: pendiente.clave },
+        { transaction },
+      )),
+      Promise.resolve(),
+    );
 
     await transaction.commit();
   } catch (error) {

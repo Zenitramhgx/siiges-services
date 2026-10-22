@@ -20,6 +20,7 @@ const findAlumnosExtraordinariosPdf = require('./find.handlers.alumnos-extraordi
 const updateAlumnosSituacion = require('./update.handlers.alumnos-situacion.adapters');
 const updateAlumnosEgreso = require('./update-alumnos-egreso.handlers.alumno.adapters');
 const findGroupAlumnosAcreditacion = require('./find-group.handlers.alumnos-acreditacion.adapters');
+const findGruposAlumnoAcreditacion = require('./find-group.handlers.grupos-alumno-acreditacion.adapters');
 
 module.exports = {
   createAlumno,
@@ -44,4 +45,5 @@ module.exports = {
   updateAlumnosSituacion,
   updateAlumnosEgreso,
   findGroupAlumnosAcreditacion,
+  findGruposAlumnoAcreditacion,
 };

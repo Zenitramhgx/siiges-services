@@ -13,7 +13,7 @@ const deleteAlumnoGrupo = async ({ deleteAlumnoGrupoQuery, alumnoId, grupoId }) 
 const deleteAlumnoAsignaturasRelations = async ({
   findAllCalificacionesQuery, deleteCalificacionQuery, alumnoId, grupoId,
 }) => {
-  const calificaciones = await findAllCalificacionesQuery({ alumnoId, grupoId, tipo: 1 });
+  const calificaciones = await findAllCalificacionesQuery({ alumnoId, grupoId });
   await Promise.all(calificaciones.map(({ id }) => deleteCalificacionQuery({ id })));
 };
 

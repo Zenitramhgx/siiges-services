@@ -38,6 +38,15 @@ async function calificacionRouter(fastify, opts, next) {
     calificacionesAdapter.updateAcreditacionAlumno,
   );
 
+  await fastify.delete(
+    '/alumnos/:alumnoId/grupos/:grupoId/asignaturas/:asignaturaId/tipos/:tipo',
+    {
+      schema: schema.deleteCalificacionAlumnoSchema,
+      onRequest: [fastify.authenticate],
+    },
+    calificacionesAdapter.deleteCalificacionAlumno,
+  );
+
   next();
 }
 
